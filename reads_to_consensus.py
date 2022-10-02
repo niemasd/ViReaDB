@@ -18,6 +18,7 @@ DEFAULT_MIN_DEPTH = 10
 DEFAULT_MIN_FREQ = 0.5
 DEFAULT_AMBIG = 'N'
 BASE_TO_NUM = {'A':0, 'C':1, 'G':2, 'T':3, None:4}
+NUM_TO_BASE = 'ACGT-'
 
 # print log
 def print_log(s='', end='\n'):
@@ -71,7 +72,7 @@ def open_aln(fn):
     return aln
 
 # compute base counts
-def compute_base_counts(aln, ref_len, min_qual=DEFAULT_MIN_QUAL, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG):
+def compute_base_counts(aln, ref_len, min_qual=DEFAULT_MIN_QUAL):
     # prepare some global helper variables
     pos_counts = zeros((ref_len,len(BASE_TO_NUM)), dtype=uintc)
     ins_counts = dict() # ins_counts[ref_pos] stores the counts of all insertions that occurred *before* position ref_pos
@@ -147,10 +148,47 @@ def compute_base_counts(aln, ref_len, min_qual=DEFAULT_MIN_QUAL, min_depth=DEFAU
             deletion_start_inds.clear(); deletion_end_inds.clear()
     return pos_counts, ins_counts
 
+# generate consensus sequence
+def generate_consensus(pos_counts, ins_counts, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG):
+    parts = ['']*(len(pos_counts)+len(ins_counts)); ind = 0
+    pos_count_tots = [float(sum(row)) for row in pos_counts]
+    for ref_pos in range(len(pos_counts)):
+        # handle insertions before ref_pos
+        if ref_pos in ins_counts:
+            curr_ins_counts = ins_counts[ref_pos]
+            ins_seqs = sorted(((curr_ins_counts[s], s) for s in curr_ins_counts), reverse=True)
+            best_c, best_s = ins_seqs[0]; tot = sum(c for c,s in ins_seqs)
+            if ref_pos != 0:
+                tot += pos_count_tots[ref_pos-1]
+            if ref_pos != len(pos_counts):
+                tot += pos_count_tots[ref_pos+1]
+            if tot >= min_depth:
+                freq = best_c / tot
+                if freq >= min_freq:
+                    parts[ind] = best_s; ind += 1
+
+        # handle ref_pos
+        curr_counts = sorted(((c,i) for i,c in enumerate(pos_counts[ref_pos])), reverse=True)
+        best_c, best_i = curr_counts[0]
+        tot = pos_count_tots[ref_pos]
+        if tot < min_depth:
+            parts[ind] = ambig; ind += 1; continue
+        freq = best_c / tot
+        if freq < min_freq:
+            parts[ind] = ambig; ind += 1; continue
+        parts[ind] = NUM_TO_BASE[best_i]; ind += 1
+    return ''.join(parts)
+
 # main content
 if __name__ == "__main__":
     args = parse_args()
     ref_len = compute_ref_length(args.reference)
     aln = open_aln(args.input)
-    pos_counts, ins_counts = compute_base_counts(aln, ref_len, args.min_qual, args.min_depth, args.min_freq, args.ambig)
-    print(ins_counts)
+    pos_counts, ins_counts = compute_base_counts(aln, ref_len, args.min_qual)
+    cons_seq = generate_consensus(pos_counts, ins_counts, args.min_depth, args.min_freq, args.ambig)
+    if args.output.lower() == 'stdout':
+        from sys import stdout as out_f
+    else:
+        out_f = open(args.output, 'w')
+    out_f.write(">%s\n%s\n" % (' '.join(argv), cons_seq))
+    out_f.close()
