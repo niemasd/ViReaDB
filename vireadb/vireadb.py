@@ -49,10 +49,10 @@ class ViReaDB:
         self.con.commit()
 
     def add_entry(self, ID, reads_fn, filetype, bufsize=DEFAULT_BUFSIZE, threads=DEFAULT_THREADS, commit=True):
-        '''Add a CRAM/BAM/SAM to this database
+        '''Add a CRAM/BAM/SAM entry to this database
 
         Args:
-            ``ID`` (``str``): The unique ID of this sample
+            ``ID`` (``str``): The unique ID of the entry to add
 
             ``reads_fn`` (``str``): The input reads file
 
@@ -103,6 +103,18 @@ class ViReaDB:
         # add this CRAM to the database
         curr_row = (ID, cram_data, None, None, None)
         self.cur.execute("INSERT INTO seqs VALUES(?, ?, ?, ?, ?)", curr_row)
+        if commit:
+            self.commit()
+
+    def del_entry(self, ID, commit=True):
+        '''Remove an entry to this database
+
+        Args:
+            ``ID`` (``str``): The unique ID of the entry to remove
+
+            ``commit`` (``bool``): Commit database after adding this sample
+        '''
+        self.cur.execute("DELETE FROM seqs WHERE ID='%s'" % ID)
         if commit:
             self.commit()
 
