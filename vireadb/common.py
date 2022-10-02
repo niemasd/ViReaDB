@@ -9,6 +9,7 @@ from sys import stderr
 
 # constants
 VERSION = '0.0.1'
+DEFAULT_BUFSIZE = 1048576 # 1 MB
 
 def print_log(s='', end='\n'):
     '''Print log message to standard error
