@@ -1,17 +1,21 @@
 #! /usr/bin/env python3
 '''
-Convert a CRAM/BAM/SAM file to a consensus sequence
+vireadb: Viral Read Database
 '''
 
 # imports
-from datetime import datetime
+from .common import *
 from numpy import uintc, zeros
+from os import remove
 from os.path import isdir, isfile
-from sys import argv, stderr
+from sys import argv
 import argparse
 import pysam
+import sqlite3
 
 # constants
+META_TABLE_COLS = ('key', 'val')
+READ_TABLE_COLS = ('ID', 'CRAM', 'NUC_COUNTS', 'INS_COUNTS', 'CONSENSUS')
 DEFAULT_BUFSIZE = 1048576 # 1 MB
 DEFAULT_MIN_QUAL = 20
 DEFAULT_MIN_DEPTH = 10
@@ -20,18 +24,62 @@ DEFAULT_AMBIG = 'N'
 BASE_TO_NUM = {'A':0, 'C':1, 'G':2, 'T':3, None:4}
 NUM_TO_BASE = 'ACGT-'
 
-# print log
-def print_log(s='', end='\n'):
-    tmp = "[%s] %s" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), s)
-    print(tmp, file=stderr); stderr.flush()
+class ViReaDB:
+    '''``ViReaDB`` database class'''
+    def __init__(self, db_fn):
+        '''``ViReaDB`` constructor
 
-# error message
-def error(s=None):
-    if s is None:
-        print_log("ERROR")
-    else:
-        print_log("ERROR: %s" % s)
-    exit(1)
+        Args:
+            ``db_fn`` (``str``): The filename of the SQLite3 database file representing this database
+
+        Returns:
+            ``ViReaDB`` object
+        '''
+        self.con = sqlite3.connect(db_fn)
+        self.cur = self.con.cursor()
+
+def create_db(db_fn, overwrite=False):
+    '''Create a new ViReaDB database
+
+    Args:
+        ``db_fn`` (``str``): The filename of the SQLite3 database file representing this database
+
+        ``overwrite`` (``bool``): Overwrite ``db_fn`` if it already exists
+
+    Returns:
+        ``ViReaDB`` object
+    '''
+    # check valid database filename
+    if isdir(db_fn):
+        error("db_fn exists as a directory: %s" % db_fn)
+    if isfile(db_fn):
+        if overwrite:
+            remove(db_fn)
+        else:
+            error("db_fn exists: %s" % db_fn)
+
+    # create SQLite3 database and populate with `meta` table
+    db = ViReaDB(db_fn)
+    db.cur.execute("CREATE TABLE meta(%s)" % ', '.join(META_TABLE_COLS))
+    db.cur.execute("""
+        INSERT INTO meta VALUES
+            ('VERSION', '%s')
+    """ % VERSION)
+    db.con.commit()
+    return db
+
+def load_db(db_fn):
+    '''Load a ViReaDB database from file
+
+    Args:
+        ``db_fn`` (``str``): The filename of the SQLite3 database file representing this database
+
+    Returns:
+        ``ViReaDB`` object
+    '''
+    if not isfile(db_fn):
+        error("db_fn not found: %s" % db_fn)
+    return ViReaDB(db_fn)
 
 # parse user args
 def parse_args():
