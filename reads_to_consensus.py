@@ -73,31 +73,53 @@ def open_aln(fn):
 # compute base counts
 def compute_base_counts(aln, ref_len, min_qual=DEFAULT_MIN_QUAL, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG):
     pos_counts = zeros((ref_len,len(BASE_TO_NUM)), dtype=uintc)
+    ins_counts = dict()
     for read_num, read in enumerate(aln.fetch(until_eof=True)):
+        # skip unmapped reads
         if read.is_unmapped:
             continue
+
+        # prepare some helper variables
         seq = read.query_sequence; quals = read.query_qualities
-        start = read.query_alignment_start; end = read.query_alignment_end
+        aln_start = read.query_alignment_start; aln_end = read.query_alignment_end
         aligned_pairs = tuple(read.get_aligned_pairs())
-        deletion_inds = list()
+        deletion_start_inds = list(); deletion_end_inds = list()
+
+        # increment base counts and keep track of deletions
         for pair_ind, pair in enumerate(aligned_pairs):
             read_pos, ref_pos = pair
             if read_pos is None:
-                deletion_inds.append(pair_ind)
-            elif read_pos < start or read_pos >= end or quals[read_pos] < args.min_qual:
+                if len(deletion_end_inds) != 0 and deletion_end_inds[-1] == pair_ind-1:
+                    deletion_end_inds[-1] = pair_ind
+                else:
+                    deletion_start_inds.append(pair_ind); deletion_end_inds.append(pair_ind)
+            elif read_pos < aln_start or read_pos >= aln_end or quals[read_pos] < args.min_qual:
                 continue # skip soft-clipped or low-quality bases
             elif ref_pos is None: # insertion
                 pass # TODO HANDLE INSERTIONS
             else:
                 pos_counts[ref_pos][BASE_TO_NUM[seq[read_pos]]] += 1
-        if len(deletion_inds) != 0:
-            pass # TODO HANDLE DELETIONS
-    return pos_counts
+
+        # handle deletions
+        if len(deletion_end_inds) != 0:
+            for deletion_start_ind, deletion_end_ind in zip(deletion_start_inds, deletion_end_inds):
+                if deletion_start_ind == 0 or deletion_end_ind == len(aligned_pairs)-1:
+                    continue # this deletion is at the very beginning or end of the read, so skip
+                prev_read_pos = aligned_pairs[deletion_start_ind-1][0]
+                if prev_read_pos < aln_start:
+                    continue # this deletion is right after a soft-clipped start, so skip
+                next_read_pos = aligned_pairs[deletion_end_ind+1][0]
+                if next_read_pos >= aln_end:
+                    continue # this deletion is right before a soft-clipped end, so skip
+                if quals[prev_read_pos] < args.min_qual or quals[next_read_pos] < args.min_qual:
+                    continue # base just before or just after this deletion is low quality, so skip
+                for deletion_ind in range(deletion_start_ind, deletion_end_ind+1):
+                    pos_counts[aligned_pairs[deletion_ind][1]][4] += 1 # '-' = 4
+    return pos_counts, ins_counts
 
 # main content
 if __name__ == "__main__":
     args = parse_args()
     ref_len = compute_ref_length(args.reference)
     aln = open_aln(args.input)
-    pos_counts = compute_base_counts(aln, ref_len, args.min_qual, args.min_depth, args.min_freq, args.ambig)
-    print(pos_counts)
+    pos_counts, ins_counts = compute_base_counts(aln, ref_len, args.min_qual, args.min_depth, args.min_freq, args.ambig)
