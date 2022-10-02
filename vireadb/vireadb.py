@@ -9,7 +9,9 @@ from .cram import *
 from .fasta import *
 from os import remove
 from os.path import isdir, isfile
+from subprocess import check_output
 from sys import argv
+from tempfile import NamedTemporaryFile
 from warnings import warn
 import argparse
 import sqlite3
@@ -17,16 +19,10 @@ import sqlite3
 # constants
 META_TABLE_COLS = ('key', 'val')
 SEQS_TABLE_COLS = ('ID', 'CRAM', 'POS_COUNTS', 'INS_COUNTS', 'CONSENSUS')
-DEFAULT_MIN_QUAL = 20
-DEFAULT_MIN_DEPTH = 10
-DEFAULT_MIN_FREQ = 0.5
-DEFAULT_AMBIG = 'N'
-BASE_TO_NUM = {'A':0, 'C':1, 'G':2, 'T':3, None:4}
-NUM_TO_BASE = 'ACGT-'
 
 class ViReaDB:
     '''``ViReaDB`` database class'''
-    def __init__(self, db_fn):
+    def __init__(self, db_fn, bufsize=DEFAULT_BUFSIZE):
         '''``ViReaDB`` constructor
 
         Args:
@@ -37,13 +33,22 @@ class ViReaDB:
         '''
         self.con = sqlite3.connect(db_fn)
         self.cur = self.con.cursor()
-        pass # TODO LOAD REF SEQ AS INSTANCE VAR 
+        self.version = self.cur.execute("SELECT val FROM meta WHERE key='VERSION'").fetchone()[0]
+        self.ref_name = self.cur.execute("SELECT val FROM meta WHERE key='REF_NAME'").fetchone()[0]
+        self.ref_seq = self.cur.execute("SELECT val FROM meta WHERE key='REF_SEQ'").fetchone()[0]
+        self.ref_len = len(self.ref_seq)
+        self.ref_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.fas', buffering=bufsize)
+        self.ref_f.write('%s\n%s\n' % (self.ref_name, self.ref_seq)); self.ref_f.flush()
+
+    def __del__(self):
+        '''``ViReaDB`` destructor'''
+        self.con.close()
 
     def commit(self):
         '''Commit the SQLite3 database'''
         self.con.commit()
 
-    def add_reads(self, ID, reads_fn, filetype, compute_counts=True, compute_consensus=True, bufsize=DEFAULT_BUFSIZE, commit=True):
+    def add_entry(self, ID, reads_fn, filetype, bufsize=DEFAULT_BUFSIZE, threads=DEFAULT_THREADS, commit=True):
         '''Add a CRAM/BAM/SAM to this database
 
         Args:
@@ -53,22 +58,22 @@ class ViReaDB:
 
             ``filetype`` (``str``): The format of the input reads file (CRAM, BAM, or SAM)
 
-            ``compute_counts`` (``bool``): Compute the positional base + insertion counts (needed for consensus sequence calling, but adds runtime)
-
-            ``compute_consensus`` (``bool``): Compute the consensus sequence (needs ``compute_counts=True``; not much added runtime beyond computing counts)
-
             ``bufsize`` (``int``): Buffer size for reading from file
+            
+            ``threads`` (``int``): Number of threads to use for compression
 
             ``commit`` (``bool``): Commit database after adding this sample
         '''
         # check for validity
+        if self.cur.execute("SELECT ID FROM seqs WHERE ID='%s'" % ID).fetchone() is not None:
+            raise ValueError("ID already exists in database: %s" % ID)
         if not isfile(reads_fn):
             raise ValueError("File not found: %s" % reads_fn)
         if not isinstance(filetype, str):
             raise TypeError("Invalid filetype: %s (must be CRAM, BAM, or SAM)" % filetype)
         filetype = filetype.strip().upper()
-        if compute_consensus and not compute_counts:
-            warn("compute_consensus=True, so counts will be computed despite compute_counts=False"); compute_counts = True
+        if not isinstance(threads, int) or threads < 1:
+            raise ValueError("Invalid number of threads: %s" % threads)
 
         # handle CRAM (just read all data)
         if filetype == 'CRAM':
@@ -76,19 +81,28 @@ class ViReaDB:
 
         # handle BAM/SAM (convert to CRAM)
         elif filetype == 'BAM' or filetype == 'SAM':
-            raise RuntimeError("UNSUPPORTED") # TODO HANDLE BAM
+            command = [
+                'samtools', 'view',
+                '--output-fmt-option', 'version=3.0', # TODO update to 3.1 when stable
+                '--output-fmt-option', 'use_lzma=1',
+                '--output-fmt-option', 'archive=1',
+                '--output-fmt-option', 'level=9',
+                '--output-fmt-option', 'lossy_names=1',
+                '-@', str(threads),
+                '-F', '4', # only include mapped reads
+                '-T', self.ref_f.name,
+                '-C', # CRAM output
+                reads_fn,
+            ]
+            cram_data = check_output(command)
 
         # invalid filetype
         else:
             raise TypeError("Invalid filetype: %s (must be CRAM, BAM, or SAM)" % filetype)
 
-        # compute counts (if applicable)
-        if compute_counts:
-            pos_counts, ins_counts = compute_base_counts(aln, ref_len, min_qual=DEFAULT_MIN_QUAL)
-
         # add this CRAM to the database
-        curr_row = (ID, cram_data, nuc_counts, ins_counts, consensus)
-        db.execute("INSERT INTO seqs VALUES(?, ?, ?, ?, ?)", curr_row)
+        curr_row = (ID, cram_data, None, None, None)
+        self.cur.execute("INSERT INTO seqs VALUES(?, ?, ?, ?, ?)", curr_row)
         if commit:
             self.commit()
 
@@ -120,14 +134,14 @@ def create_db(db_fn, ref_fn, overwrite=False):
     ref_name, ref_seq = load_ref(ref_fn)
 
     # create SQLite3 database and populate with `meta` table
-    db = ViReaDB(db_fn)
-    db.cur.execute("CREATE TABLE meta(%s)" % ', '.join(META_TABLE_COLS))
-    db.cur.execute("INSERT INTO meta VALUES(?, ?)", ('VERSION', VERSION))
-    db.cur.execute("INSERT INTO meta VALUES(?, ?)", ('REF_NAME', ref_name))
-    db.cur.execute("INSERT INTO meta VALUES(?, ?)", ('REF_SEQ', ref_seq))
-    db.cur.execute("CREATE TABLE seqs(%s)" % ', '.join(SEQS_TABLE_COLS))
-    db.con.commit()
-    return db
+    con = sqlite3.connect(db_fn); cur = con.cursor()
+    cur.execute("CREATE TABLE meta(%s)" % ', '.join(META_TABLE_COLS))
+    cur.execute("INSERT INTO meta VALUES(?, ?)", ('VERSION', VERSION))
+    cur.execute("INSERT INTO meta VALUES(?, ?)", ('REF_NAME', ref_name))
+    cur.execute("INSERT INTO meta VALUES(?, ?)", ('REF_SEQ', ref_seq))
+    cur.execute("CREATE TABLE seqs(%s)" % ', '.join(SEQS_TABLE_COLS))
+    con.commit(); con.close()
+    return ViReaDB(db_fn)
 
 def load_db(db_fn):
     '''Load a ViReaDB database from file

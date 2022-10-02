@@ -4,11 +4,20 @@ Functions dealing with CRAM/BAM/SAM files
 '''
 
 # import statements
+from .common import *
 from numpy import uintc, zeros
 import pysam
 
+# constants
+DEFAULT_MIN_QUAL = 20
+DEFAULT_MIN_DEPTH = 10
+DEFAULT_MIN_FREQ = 0.5
+DEFAULT_AMBIG = 'N'
+BASE_TO_NUM = {'A':0, 'C':1, 'G':2, 'T':3, None:4}
+NUM_TO_BASE = 'ACGT-'
+
 # open input CRAM file
-def open_aln(fn):
+def open_aln(fn, threads=DEFAULT_THREADS):
     if fn.lower() == 'stdin':
         fn = '-'
     tmp = pysam.set_verbosity(0) # disable htslib verbosity to avoid "no index file" warning
