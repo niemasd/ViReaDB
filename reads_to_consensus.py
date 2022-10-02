@@ -152,7 +152,7 @@ def compute_base_counts(aln, ref_len, min_qual=DEFAULT_MIN_QUAL):
 def generate_consensus(pos_counts, ins_counts, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG):
     parts = ['']*(len(pos_counts)+len(ins_counts)); ind = 0
     pos_count_tots = [float(sum(row)) for row in pos_counts]
-    for ref_pos in range(len(pos_counts)):
+    for ref_pos in range(len(pos_counts)+1):
         # handle insertions before ref_pos
         if ref_pos in ins_counts:
             curr_ins_counts = ins_counts[ref_pos]
@@ -168,15 +168,16 @@ def generate_consensus(pos_counts, ins_counts, min_depth=DEFAULT_MIN_DEPTH, min_
                     parts[ind] = best_s; ind += 1
 
         # handle ref_pos
-        curr_counts = sorted(((c,i) for i,c in enumerate(pos_counts[ref_pos])), reverse=True)
-        best_c, best_i = curr_counts[0]
-        tot = pos_count_tots[ref_pos]
-        if tot < min_depth:
-            parts[ind] = ambig; ind += 1; continue
-        freq = best_c / tot
-        if freq < min_freq:
-            parts[ind] = ambig; ind += 1; continue
-        parts[ind] = NUM_TO_BASE[best_i]; ind += 1
+        if ref_pos != len(pos_counts):
+            curr_counts = sorted(((c,i) for i,c in enumerate(pos_counts[ref_pos])), reverse=True)
+            best_c, best_i = curr_counts[0]
+            tot = pos_count_tots[ref_pos]
+            if tot < min_depth:
+                parts[ind] = ambig; ind += 1; continue
+            freq = best_c / tot
+            if freq < min_freq:
+                parts[ind] = ambig; ind += 1; continue
+            parts[ind] = NUM_TO_BASE[best_i]; ind += 1
     return ''.join(parts)
 
 # main content
