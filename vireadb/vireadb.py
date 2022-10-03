@@ -62,7 +62,7 @@ class ViReaDB:
             
             ``threads`` (``int``): Number of threads to use for compression
 
-            ``commit`` (``bool``): Commit database after adding this sample
+            ``commit`` (``bool``): Commit database after adding this entry
         '''
         # check for validity
         if self.cur.execute("SELECT ID FROM seqs WHERE ID='%s'" % ID).fetchone() is not None:
@@ -112,11 +112,30 @@ class ViReaDB:
         Args:
             ``ID`` (``str``): The unique ID of the entry to remove
 
-            ``commit`` (``bool``): Commit database after adding this sample
+            ``commit`` (``bool``): Commit database after removing this entry
         '''
+        if self.cur.execute("SELECT ID FROM seqs WHERE ID='%s'" % ID).fetchone() is None:
+            raise ValueError("ID doesn't exist in database: %s" % ID)
         self.cur.execute("DELETE FROM seqs WHERE ID='%s'" % ID)
         if commit:
             self.commit()
+
+    def compute_counts(self, ID, overwrite=False, commit=True):
+        '''Compute position and insertion counts for a given entry
+
+        Args:
+            ``ID`` (``str``): The unique ID of the entry whose counts to compute
+
+            ``overwrite`` (``bool``): ``True`` to recompute (and overwrite) counts if they already exist
+
+            ``commit`` (``bool``): Commit database after updating this entry
+        '''
+        tmp = self.cur.execute("SELECT POS_COUNTS, INS_COUNTS FROM seqs WHERE ID='%s'" % ID).fetchone()
+        if tmp is None:
+            raise ValueError("ID doesn't exist in database: %s" % ID)
+        pos_counts, ins_counts = tmp
+        raise RuntimeError("TODO HERE")
+
 
 def create_db(db_fn, ref_fn, overwrite=False):
     '''Create a new ViReaDB database
