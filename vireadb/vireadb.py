@@ -48,7 +48,7 @@ class ViReaDB:
         '''Commit the SQLite3 database'''
         self.con.commit()
 
-    def add_entry(self, ID, reads_fn, filetype, bufsize=DEFAULT_BUFSIZE, threads=DEFAULT_THREADS, commit=True):
+    def add_entry(self, ID, reads_fn, filetype=None, bufsize=DEFAULT_BUFSIZE, threads=DEFAULT_THREADS, commit=True):
         '''Add a CRAM/BAM/SAM entry to this database
 
         Args:
@@ -56,7 +56,7 @@ class ViReaDB:
 
             ``reads_fn`` (``str``): The input reads file
 
-            ``filetype`` (``str``): The format of the input reads file (CRAM, BAM, or SAM)
+            ``filetype`` (``str``): The format of the input reads file (CRAM, BAM, or SAM), or None to infer from ``reads_fn``
 
             ``bufsize`` (``int``): Buffer size for reading from file
             
@@ -69,6 +69,8 @@ class ViReaDB:
             raise ValueError("ID already exists in database: %s" % ID)
         if not isfile(reads_fn):
             raise ValueError("File not found: %s" % reads_fn)
+        if filetype is None:
+            filetype = reads_fn.split('.')[-1].upper()
         if not isinstance(filetype, str):
             raise TypeError("Invalid filetype: %s (must be CRAM, BAM, or SAM)" % filetype)
         filetype = filetype.strip().upper()
