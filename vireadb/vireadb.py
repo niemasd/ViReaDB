@@ -48,7 +48,7 @@ class ViReaDB:
         '''Commit the SQLite3 database'''
         self.con.commit()
 
-    def add_entry(self, ID, reads_fn, filetype=None, bufsize=DEFAULT_BUFSIZE, threads=DEFAULT_THREADS, commit=True):
+    def add_entry(self, ID, reads_fn, filetype=None, include_unmapped=False, bufsize=DEFAULT_BUFSIZE, threads=DEFAULT_THREADS, commit=True):
         '''Add a CRAM/BAM/SAM entry to this database
 
         Args:
@@ -91,11 +91,12 @@ class ViReaDB:
                 '--output-fmt-option', 'level=9',
                 '--output-fmt-option', 'lossy_names=1',
                 '-@', str(threads),
-                '-F', '4', # only include mapped reads
                 '-T', self.ref_f.name,
                 '-C', # CRAM output
-                reads_fn,
             ]
+            if not include_unmapped:
+                command += ['-F', '4'] # only include mapped reads
+            command += [reads_fn]
             cram_data = check_output(command)
 
         # invalid filetype
