@@ -232,7 +232,7 @@ class ViReaDB:
             ins_counts = json.loads(lzma_decomp.decompress(ins_counts_xz).decode("ascii"))
         return pos_counts, ins_counts
 
-    def compute_consensus(self, ID, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG, overwrite=False, commit=True):
+    def compute_consensus(self, ID, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG, remove_gaps=True, overwrite=False, commit=True):
         '''Compute the consensus sequence for a given entry. The position and insertion counts must have already been computed
 
         Args:
@@ -243,6 +243,8 @@ class ViReaDB:
             ``min_freq`` (``float``): Minimum frequency [0,1] to call base/insertion in consensus
 
             ``ambig`` (``str``): Symbol to use for ambiguous bases in consensus
+
+            ``remove_gaps`` (``bool``): Remove gap characters (``-``) from consensus
 
             ``overwrite`` (``bool``): ``True`` to recompute (and overwrite) counts if they already exist
 
@@ -286,6 +288,32 @@ class ViReaDB:
             return None
         lzma_decomp = LZMADecompressor()
         return lzma_decomp.decompress(tmp[0]).decode("ascii")
+
+    def export_fasta(self, out_fn, IDs, overwrite=False):
+        '''Export multiple consensus sequences as a FASTA file
+
+        Args:
+            ``out_fn`` (``str``): The path of the output FASTA file
+
+            ``IDs`` (``list``): List of IDs whose consensus sequences to export
+
+            ``overwrite`` (``bool``): Overwrite output file if it exists
+        '''
+        if isfile(out_fn) and not overwrite:
+            raise ValueError("Output file exists: %s" % out_fn)
+        if isinstance(IDs, str):
+            IDs = [IDs]
+        f = open(out_fn, 'w')
+        for ID in IDs:
+            try:
+                seq = self.get_consensus(ID)
+            except ValueError:
+                warn("ID doesn't exist in database and was thus skipped: %s" % ID)
+            if seq is None:
+                warn("Consensus sequence hasn't been computed and was thus skipped: %s" % ID)
+            else:
+                f.write(">%s (vireadb v%s)\n%s\n" % (ID, self.version, seq))
+        f.close()
 
 def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
     '''Create a new ViReaDB database

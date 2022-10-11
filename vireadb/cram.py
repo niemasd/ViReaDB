@@ -95,7 +95,7 @@ def compute_base_counts(aln, ref_len, min_qual=DEFAULT_MIN_QUAL):
     return pos_counts, ins_counts
 
 # generate consensus sequence
-def compute_consensus(pos_counts, ins_counts, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG):
+def compute_consensus(pos_counts, ins_counts, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG, remove_gaps=True):
     parts = ['']*(len(pos_counts)+len(ins_counts)); ind = 0
     pos_count_tots = [float(sum(row)) for row in pos_counts]
     for ref_pos in range(len(pos_counts)+1):
@@ -124,4 +124,7 @@ def compute_consensus(pos_counts, ins_counts, min_depth=DEFAULT_MIN_DEPTH, min_f
             if freq < min_freq:
                 parts[ind] = ambig; ind += 1; continue
             parts[ind] = NUM_TO_BASE[best_i]; ind += 1
-    return ''.join(parts)
+    consensus = ''.join(parts)
+    if remove_gaps:
+        consensus = consensus.replace('-','')
+    return consensus
