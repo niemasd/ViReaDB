@@ -221,7 +221,6 @@ class ViReaDB:
         self.cur.execute("UPDATE seqs SET CONSENSUS_XZ=? WHERE ID=?", (consensus_xz, ID))
         if commit:
             self.commit()
-        print(consensus)
         raise RuntimeError("TODO HERE")
 
 def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
