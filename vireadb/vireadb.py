@@ -76,6 +76,10 @@ class ViReaDB:
         '''
         return self.cur.execute("SELECT COUNT(*) FROM seqs").fetchone()[0]
 
+    def __getitem__(self, ID):
+        '''Shorthand for get_entry(ID)'''
+        return self.get_entry(ID)
+
     def commit(self):
         '''Commit the SQLite3 database'''
         self.con.commit()
@@ -168,7 +172,7 @@ class ViReaDB:
             ``commit`` (``bool``): Commit database after removing this entry
         '''
         if self.cur.execute("SELECT ID FROM seqs WHERE ID='%s'" % ID).fetchone() is None:
-            raise ValueError("ID doesn't exist in database: %s" % ID)
+            raise KeyError("ID doesn't exist in database: %s" % ID)
         self.cur.execute("DELETE FROM seqs WHERE ID='%s'" % ID)
         if commit:
             self.commit()
@@ -191,8 +195,9 @@ class ViReaDB:
         pass # 'CRAM', 'POS_COUNTS_XZ', 'INS_COUNTS_XZ', 'CONSENSUS_XZ
         tmp = self.cur.execute("SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
         if tmp is None:
-            raise ValueError("ID doesn't exist in database: %s" % ID)
-        pass # TODO
+            raise KeyError("ID doesn't exist in database: %s" % ID)
+        cram, pos_counts_xz, ins_counts_xz, consensus_xz = tmp
+        return cram, decompress_pos_counts(pos_counts_xz), decompress_ins_counts(ins_counts_xz), decompress_seq(consensus_xz)
 
     def compute_counts(self, ID, min_qual=DEFAULT_MIN_QUAL, bufsize=DEFAULT_BUFSIZE, overwrite=False, commit=True):
         '''Compute position and insertion counts for a given entry
@@ -211,7 +216,7 @@ class ViReaDB:
         # check for validity
         tmp = self.cur.execute("SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
         if tmp is None:
-            raise ValueError("ID doesn't exist in database: %s" % ID)
+            raise KeyError("ID doesn't exist in database: %s" % ID)
         cram_data, pos_counts_xz, ins_counts_xz = tmp
         if pos_counts_xz is not None and ins_counts_xz is not None and not overwrite:
             raise ValueError("Counts already exist for ID: %s" % ID)
@@ -243,7 +248,7 @@ class ViReaDB:
         '''
         tmp = self.cur.execute("SELECT POS_COUNTS_XZ, INS_COUNTS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
         if tmp is None:
-            raise ValueError("ID doesn't exist in database: %s" % ID)
+            raise KeyError("ID doesn't exist in database: %s" % ID)
         pos_counts_xz, ins_counts_xz = tmp
         pos_counts = decompress_pos_counts(pos_counts_xz)
         ins_counts = decompress_ins_counts(ins_counts_xz)
@@ -270,10 +275,10 @@ class ViReaDB:
         # check for validity
         tmp = self.cur.execute("SELECT POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
         if tmp is None:
-            raise ValueError("ID doesn't exist in database: %s" % ID)
+            raise KeyError("ID doesn't exist in database: %s" % ID)
         pos_counts_xz, ins_counts_xz, consensus_xz = tmp
         if pos_counts_xz is None or ins_counts_xz is None:
-            raise ValueError("Must compute counts before computing consensus for ID: %s" % ID)
+            raise RuntimeError("Must compute counts before computing consensus for ID: %s" % ID)
         if consensus_xz is not None and not overwrite:
             raise ValueError("Consensus already exists for ID: %s" % ID)
 
@@ -297,7 +302,7 @@ class ViReaDB:
         '''
         tmp = self.cur.execute("SELECT CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
         if tmp is None:
-            raise ValueError("ID doesn't exist in database: %s" % ID)
+            raise KeyError("ID doesn't exist in database: %s" % ID)
         return decompress_seq(tmp[0])
 
     def export_fasta(self, out_fn, IDs, overwrite=False):
@@ -318,7 +323,7 @@ class ViReaDB:
         for ID in IDs:
             try:
                 seq = self.get_consensus(ID)
-            except ValueError:
+            except KeyError:
                 warn("ID doesn't exist in database and was thus skipped: %s" % ID)
             if seq is None:
                 warn("Consensus sequence hasn't been computed and was thus skipped: %s" % ID)
