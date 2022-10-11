@@ -5,10 +5,11 @@ vireadb: Viral Read Database
 
 # imports
 from .common import *
+from .compress import *
 from .cram import *
 from .fasta import *
-from io import BytesIO
-from lzma import LZMACompressor, LZMADecompressor, PRESET_EXTREME
+from io import BytesIO # TODO DELETE
+from lzma import LZMACompressor, LZMADecompressor, PRESET_EXTREME # TODO DELETE
 from os import remove
 from os.path import isdir, isfile
 from subprocess import call, check_output, DEVNULL, PIPE, Popen
@@ -16,7 +17,6 @@ from sys import argv
 from tempfile import NamedTemporaryFile
 from warnings import warn
 import argparse
-import json
 import numpy
 import sqlite3
 
@@ -52,13 +52,12 @@ class ViReaDB:
         Returns:
             ``ViReaDB`` object
         '''
-        lzma_decomp = LZMADecompressor()
         self.con = sqlite3.connect(db_fn)
         self.cur = self.con.cursor()
         self.version = self.cur.execute("SELECT val FROM meta WHERE key='VERSION'").fetchone()[0]
         self.ref_name = self.cur.execute("SELECT val FROM meta WHERE key='REF_NAME'").fetchone()[0]
         ref_seq_xz = self.cur.execute("SELECT val FROM meta WHERE key='REF_SEQ_XZ'").fetchone()[0]
-        self.ref_seq = lzma_decomp.decompress(ref_seq_xz).decode()
+        self.ref_seq = decompress_seq(ref_seq_xz)
         self.ref_len = len(self.ref_seq)
         self.ref_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.fas', buffering=bufsize)
         self.ref_f.write('%s\n%s\n' % (self.ref_name, self.ref_seq)); self.ref_f.flush()
@@ -68,6 +67,14 @@ class ViReaDB:
     def __del__(self):
         '''``ViReaDB`` destructor'''
         self.con.close()
+
+    def __len__(self):
+        '''Return the number of entries in this database
+
+        Returns:
+            The number of entries in this database
+        '''
+        return self.cur.execute("SELECT COUNT(*) FROM seqs").fetchone()[0]
 
     def commit(self):
         '''Commit the SQLite3 database'''
@@ -166,6 +173,27 @@ class ViReaDB:
         if commit:
             self.commit()
 
+    def get_entry(self, ID):
+        '''Return the data of an entry associated with a given ID in this database
+
+        Args:
+            ``ID`` (``str``): The unique ID of the entry to retrieve
+
+        Returns:
+            ``bytes`` object containing the CRAM data of the reads
+            
+            ``numpy.array`` object containing the position counts
+            
+            ``dict`` object containing the insertion counts
+            
+            ``str`` object containing the consensus sequence
+        '''
+        pass # 'CRAM', 'POS_COUNTS_XZ', 'INS_COUNTS_XZ', 'CONSENSUS_XZ
+        tmp = self.cur.execute("SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
+        if tmp is None:
+            raise ValueError("ID doesn't exist in database: %s" % ID)
+        pass # TODO
+
     def compute_counts(self, ID, min_qual=DEFAULT_MIN_QUAL, bufsize=DEFAULT_BUFSIZE, overwrite=False, commit=True):
         '''Compute position and insertion counts for a given entry
 
@@ -195,11 +223,8 @@ class ViReaDB:
         cram_f.close()
 
         # compress and save counts
-        lzma_comp = LZMACompressor(preset=PRESET_EXTREME)
-        pos_counts_vf = BytesIO(); numpy.save(pos_counts_vf, pos_counts, allow_pickle=False); pos_counts_vf.seek(0)
-        pos_counts_xz = lzma_comp.compress(pos_counts_vf.read()) + lzma_comp.flush()
-        lzma_comp = LZMACompressor(preset=PRESET_EXTREME)
-        ins_counts_xz = lzma_comp.compress(json.dumps(ins_counts).encode("ascii")) + lzma_comp.flush()
+        pos_counts_xz = compress_pos_counts(pos_counts)
+        ins_counts_xz = compress_ins_counts(ins_counts)
         self.cur.execute("UPDATE seqs SET POS_COUNTS_XZ=? WHERE ID=?", (pos_counts_xz, ID))
         self.cur.execute("UPDATE seqs SET INS_COUNTS_XZ=? WHERE ID=?", (ins_counts_xz, ID))
         if commit:
@@ -220,16 +245,8 @@ class ViReaDB:
         if tmp is None:
             raise ValueError("ID doesn't exist in database: %s" % ID)
         pos_counts_xz, ins_counts_xz = tmp
-        if pos_counts_xz is None:
-            pos_counts = None
-        else:
-            lzma_decomp = LZMADecompressor()
-            pos_counts = numpy.load(BytesIO(lzma_decomp.decompress(pos_counts_xz)), allow_pickle=False)
-        if ins_counts_xz is None:
-            ins_counts = None
-        else:
-            lzma_decomp = LZMADecompressor()
-            ins_counts = json.loads(lzma_decomp.decompress(ins_counts_xz).decode("ascii"))
+        pos_counts = decompress_pos_counts(pos_counts_xz)
+        ins_counts = decompress_ins_counts(ins_counts_xz)
         return pos_counts, ins_counts
 
     def compute_consensus(self, ID, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG, remove_gaps=True, overwrite=False, commit=True):
@@ -261,13 +278,10 @@ class ViReaDB:
             raise ValueError("Consensus already exists for ID: %s" % ID)
 
         # decompress counts, compute consensus, and save
-        lzma_decomp = LZMADecompressor()
-        pos_counts = numpy.load(BytesIO(lzma_decomp.decompress(pos_counts_xz)), allow_pickle=False)
-        lzma_decomp = LZMADecompressor()
-        ins_counts = json.loads(lzma_decomp.decompress(ins_counts_xz).decode("ascii"))
+        pos_counts = decompress_pos_counts(pos_counts_xz)
+        ins_counts = decompress_ins_counts(ins_counts_xz)
         consensus = compute_consensus(pos_counts, ins_counts, min_depth=min_depth, min_freq=min_freq, ambig=ambig)
-        lzma_comp = LZMACompressor(preset=PRESET_EXTREME)
-        consensus_xz = lzma_comp.compress(consensus.encode("ascii")) + lzma_comp.flush()
+        consensus_xz = compress_seq(consensus)
         self.cur.execute("UPDATE seqs SET CONSENSUS_XZ=? WHERE ID=?", (consensus_xz, ID))
         if commit:
             self.commit()
@@ -284,10 +298,7 @@ class ViReaDB:
         tmp = self.cur.execute("SELECT CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
         if tmp is None:
             raise ValueError("ID doesn't exist in database: %s" % ID)
-        if tmp[0] is None:
-            return None
-        lzma_decomp = LZMADecompressor()
-        return lzma_decomp.decompress(tmp[0]).decode("ascii")
+        return decompress_seq(tmp[0])
 
     def export_fasta(self, out_fn, IDs, overwrite=False):
         '''Export multiple consensus sequences as a FASTA file
@@ -344,7 +355,7 @@ def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
 
     # load reference genome
     ref_name, ref_seq = load_ref(ref_fn)
-    ref_seq_xz = lzma_comp.compress(ref_seq.encode("ascii")) + lzma_comp.flush()
+    ref_seq_xz = compress_seq(ref_seq)
 
     # index reference genome
     mmi_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.mmi', buffering=bufsize)

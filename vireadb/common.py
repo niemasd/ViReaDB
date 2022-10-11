@@ -6,6 +6,7 @@ Common Functions
 # imports
 from datetime import datetime
 from sys import stderr
+import numpy
 
 # constants
 VERSION = '0.0.1'
