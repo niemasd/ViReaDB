@@ -47,6 +47,8 @@ class ViReaDB:
         Args:
             ``db_fn`` (``str``): The filename of the SQLite3 database file representing this database
 
+            ``bufsize`` (``int``): Buffer size for reading from file
+
         Returns:
             ``ViReaDB`` object
         '''
@@ -170,6 +172,10 @@ class ViReaDB:
         Args:
             ``ID`` (``str``): The unique ID of the entry whose counts to compute
 
+            ``min_qual`` (``int``): Minimum base quality to count base
+
+            ``bufsize`` (``int``): Buffer size for reading from file
+
             ``overwrite`` (``bool``): ``True`` to recompute (and overwrite) counts if they already exist
 
             ``commit`` (``bool``): Commit database after updating this entry
@@ -200,6 +206,21 @@ class ViReaDB:
             self.commit()
 
     def compute_consensus(self, ID, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG, overwrite=False, commit=True):
+        '''Compute the consensus sequence for a given entry. The position and insertion counts must have already been computed
+
+        Args:
+            ``ID`` (``str``): The unique ID of the entry whose counts to compute
+
+            ``min_depth`` (``int``): Minimum depth to call base/insertion in consensus
+
+            ``min_freq`` (``float``): Minimum frequency [0,1] to call base/insertion in consensus
+
+            ``ambig`` (``str``): Symbol to use for ambiguous bases in consensus
+
+            ``overwrite`` (``bool``): ``True`` to recompute (and overwrite) counts if they already exist
+
+            ``commit`` (``bool``): Commit database after updating this entry
+        '''
         # check for validity
         tmp = self.cur.execute("SELECT POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
         if tmp is None:
