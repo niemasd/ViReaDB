@@ -80,6 +80,10 @@ class ViReaDB:
         '''Shorthand for get_entry(ID)'''
         return self.get_entry(ID)
 
+    def __delitem__(self, ID):
+        '''Shorthand for del_entry(ID)'''
+        self.del_entry(ID)
+
     def commit(self):
         '''Commit the SQLite3 database'''
         self.con.commit()
