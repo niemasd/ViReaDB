@@ -205,6 +205,33 @@ class ViReaDB:
         if commit:
             self.commit()
 
+    def get_counts(self, ID):
+        '''Return the position and insertion counts for a given entry
+
+        Args:
+            ``ID`` (``str``): The unique ID of the entry whose counts to return
+
+        Returns:
+            The position counts for ``ID`` (or ``None`` if not yet computed)
+
+            The insertion counts for ``ID`` (or ``None`` if not yet computed)
+        '''
+        tmp = self.cur.execute("SELECT POS_COUNTS_XZ, INS_COUNTS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
+        if tmp is None:
+            raise ValueError("ID doesn't exist in database: %s" % ID)
+        pos_counts_xz, ins_counts_xz = tmp
+        if pos_counts_xz is None:
+            pos_counts = None
+        else:
+            lzma_decomp = LZMADecompressor()
+            pos_counts = numpy.load(BytesIO(lzma_decomp.decompress(pos_counts_xz)), allow_pickle=False)
+        if ins_counts_xz is None:
+            ins_counts = None
+        else:
+            lzma_decomp = LZMADecompressor()
+            ins_counts = json.loads(lzma_decomp.decompress(ins_counts_xz).decode("ascii"))
+        return pos_counts, ins_counts
+
     def compute_consensus(self, ID, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG, overwrite=False, commit=True):
         '''Compute the consensus sequence for a given entry. The position and insertion counts must have already been computed
 
@@ -242,7 +269,23 @@ class ViReaDB:
         self.cur.execute("UPDATE seqs SET CONSENSUS_XZ=? WHERE ID=?", (consensus_xz, ID))
         if commit:
             self.commit()
-        raise RuntimeError("TODO HERE")
+
+    def get_consensus(self, ID):
+        '''Return the consensus sequence for a given entry
+
+        Args:
+            ``ID`` (``str``): The unique ID of the entry whose counts to return
+
+        Returns:
+            The consensus sequence for ``ID`` (or ``None`` if not yet computed)
+        '''
+        tmp = self.cur.execute("SELECT CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
+        if tmp is None:
+            raise ValueError("ID doesn't exist in database: %s" % ID)
+        if tmp[0] is None:
+            return None
+        lzma_decomp = LZMADecompressor()
+        return lzma_decomp.decompress(tmp[0]).decode("ascii")
 
 def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
     '''Create a new ViReaDB database
