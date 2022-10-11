@@ -9,7 +9,7 @@ from .cram import *
 from .fasta import *
 from os import remove
 from os.path import isdir, isfile
-from subprocess import check_output
+from subprocess import call, check_output, DEVNULL, PIPE, Popen
 from sys import argv
 from tempfile import NamedTemporaryFile
 from warnings import warn
@@ -19,6 +19,21 @@ import sqlite3
 # constants
 META_TABLE_COLS = ('key', 'val')
 SEQS_TABLE_COLS = ('ID', 'CRAM', 'POS_COUNTS', 'INS_COUNTS', 'CONSENSUS')
+
+# base commands
+BASE_COMMAND_SAMTOOLS_VIEW_CRAM = [
+    'samtools', 'view',
+    '--output-fmt-option', 'version=3.0', # TODO update to 3.1 when stable
+    '--output-fmt-option', 'use_lzma=1',
+    '--output-fmt-option', 'archive=1',
+    '--output-fmt-option', 'level=9',
+    '--output-fmt-option', 'lossy_names=1',
+    '-C', # CRAM output
+]
+BASE_COMMAND_MINIMAP2 = [
+    'minimap2',
+    '-x', 'sr',
+]
 
 class ViReaDB:
     '''``ViReaDB`` database class'''
@@ -39,6 +54,8 @@ class ViReaDB:
         self.ref_len = len(self.ref_seq)
         self.ref_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.fas', buffering=bufsize)
         self.ref_f.write('%s\n%s\n' % (self.ref_name, self.ref_seq)); self.ref_f.flush()
+        self.mmi_f = NamedTemporaryFile('wb', prefix='vireadb', suffix='.mmi', buffering=bufsize)
+        self.mmi_f.write(self.cur.execute("SELECT val FROM meta WHERE key='REF_MMI'").fetchone()[0]); self.mmi_f.flush()
 
     def __del__(self):
         '''``ViReaDB`` destructor'''
@@ -49,14 +66,16 @@ class ViReaDB:
         self.con.commit()
 
     def add_entry(self, ID, reads_fn, filetype=None, include_unmapped=False, bufsize=DEFAULT_BUFSIZE, threads=DEFAULT_THREADS, commit=True):
-        '''Add a CRAM/BAM/SAM entry to this database
+        '''Add a CRAM/BAM/SAM/FASTQ entry to this database. CRAM inputs are added exactly as-is.
 
         Args:
             ``ID`` (``str``): The unique ID of the entry to add
 
-            ``reads_fn`` (``str``): The input reads file
+            ``reads_fn`` (``str``): The input reads file. Can provide list of multiple files if FASTQ
 
-            ``filetype`` (``str``): The format of the input reads file (CRAM, BAM, or SAM), or None to infer from ``reads_fn``
+            ``filetype`` (``str``): The format of the input reads file (CRAM, BAM, SAM, or FASTQ), or None to infer from ``reads_fn``
+
+            ``include_unmapped`` (``bool``): Include unmapped reads when converting from non-CRAM formats
 
             ``bufsize`` (``int``): Buffer size for reading from file
             
@@ -67,15 +86,35 @@ class ViReaDB:
         # check for validity
         if self.cur.execute("SELECT ID FROM seqs WHERE ID='%s'" % ID).fetchone() is not None:
             raise ValueError("ID already exists in database: %s" % ID)
-        if not isfile(reads_fn):
+        if isinstance(reads_fn, list):
+            if len(reads_fn) == 0:
+                raise ValueError("Must specify at least 1 reads file")
+            elif len(reads_fn) == 1:
+                reads_fn = reads_fn[0]
+        if isinstance(reads_fn, str) and not isfile(reads_fn):
             raise ValueError("File not found: %s" % reads_fn)
         if filetype is None:
-            filetype = reads_fn.split('.')[-1].upper()
+            if isinstance(reads_fn, str):
+                filetype = reads_fn.upper().rstrip('.GZ').split('.')[-1]
+            else:
+                for fn in reads_fn:
+                    if filetype is None:
+                        filetype = fn.upper().rstrip('.GZ').split('.')[-1]
+                    elif filetype != fn.upper().rstrip('.GZ').split('.')[-1]:
+                        raise ValueError("All reads_fn arguments must be the same filetype")
         if not isinstance(filetype, str):
-            raise TypeError("Invalid filetype: %s (must be CRAM, BAM, or SAM)" % filetype)
+            raise TypeError("Invalid filetype: %s (must be CRAM, BAM, SAM, or FASTQ)" % filetype)
         filetype = filetype.strip().upper()
+        if not isinstance(reads_fn, str) and filetype != 'FASTQ':
+            raise ValueError("Can only provide multiple reads files for FASTQ")
         if not isinstance(threads, int) or threads < 1:
             raise ValueError("Invalid number of threads: %s" % threads)
+
+        # prep samtools and minimap2 commands
+        command_samtools_view_cram = BASE_COMMAND_SAMTOOLS_VIEW_CRAM + ['-T', self.ref_f.name, '-@', str(threads)]
+        if not include_unmapped:
+            command_samtools_view_cram += ['-F', '4'] # only include mapped reads
+        command_minimap2 = BASE_COMMAND_MINIMAP2 + ['-a', self.mmi_f.name]
 
         # handle CRAM (just read all data)
         if filetype == 'CRAM':
@@ -83,21 +122,17 @@ class ViReaDB:
 
         # handle BAM/SAM (convert to CRAM)
         elif filetype == 'BAM' or filetype == 'SAM':
-            command = [
-                'samtools', 'view',
-                '--output-fmt-option', 'version=3.0', # TODO update to 3.1 when stable
-                '--output-fmt-option', 'use_lzma=1',
-                '--output-fmt-option', 'archive=1',
-                '--output-fmt-option', 'level=9',
-                '--output-fmt-option', 'lossy_names=1',
-                '-@', str(threads),
-                '-T', self.ref_f.name,
-                '-C', # CRAM output
-            ]
-            if not include_unmapped:
-                command += ['-F', '4'] # only include mapped reads
-            command += [reads_fn]
-            cram_data = check_output(command)
+            cram_data = check_output(command_samtools_view_cram + [reads_fn])
+
+        # handle FASTQ (map to ref + convert to CRAM)
+        elif filetype == 'FASTQ':
+            if isinstance(reads_fn, str):
+                command_minimap2 += [reads_fn]
+            else:
+                command_minimap2 += reads_fn
+            p_minimap2 = Popen(command_minimap2, stdout=PIPE, stderr=DEVNULL)
+            cram_data = check_output(command_samtools_view_cram, stdin=p_minimap2.stdout)
+            p_minimap2.wait()
 
         # invalid filetype
         else:
@@ -140,7 +175,7 @@ class ViReaDB:
         raise RuntimeError("TODO HERE")
 
 
-def create_db(db_fn, ref_fn, overwrite=False):
+def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
     '''Create a new ViReaDB database
 
     Args:
@@ -167,12 +202,20 @@ def create_db(db_fn, ref_fn, overwrite=False):
     # load reference genome
     ref_name, ref_seq = load_ref(ref_fn)
 
+    # index reference genome
+    mmi_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.mmi', buffering=bufsize)
+    mmi_fn = mmi_f.name; mmi_f.close()
+    call(BASE_COMMAND_MINIMAP2 + ['-d', mmi_fn, ref_fn], stdout=DEVNULL, stderr=DEVNULL)
+    mmi_f = open(mmi_fn, 'rb'); mmi_data = mmi_f.read()
+    mmi_f.close(); remove(mmi_fn)
+
     # create SQLite3 database and populate with `meta` table
     con = sqlite3.connect(db_fn); cur = con.cursor()
     cur.execute("CREATE TABLE meta(%s)" % ', '.join(META_TABLE_COLS))
     cur.execute("INSERT INTO meta VALUES(?, ?)", ('VERSION', VERSION))
     cur.execute("INSERT INTO meta VALUES(?, ?)", ('REF_NAME', ref_name))
     cur.execute("INSERT INTO meta VALUES(?, ?)", ('REF_SEQ', ref_seq))
+    cur.execute("INSERT INTO meta VALUES(?, ?)", ('REF_MMI', mmi_data))
     cur.execute("CREATE TABLE seqs(%s)" % ', '.join(SEQS_TABLE_COLS))
     con.commit(); con.close()
     return ViReaDB(db_fn)
