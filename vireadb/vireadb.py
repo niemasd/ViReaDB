@@ -7,6 +7,8 @@ vireadb: Viral Read Database
 from .common import *
 from .cram import *
 from .fasta import *
+from io import BytesIO
+from lzma import LZMACompressor, LZMADecompressor, PRESET_EXTREME
 from os import remove
 from os.path import isdir, isfile
 from subprocess import call, check_output, DEVNULL, PIPE, Popen
@@ -14,11 +16,13 @@ from sys import argv
 from tempfile import NamedTemporaryFile
 from warnings import warn
 import argparse
+import json
+import numpy
 import sqlite3
 
 # constants
 META_TABLE_COLS = ('key', 'val')
-SEQS_TABLE_COLS = ('ID', 'CRAM', 'POS_COUNTS', 'INS_COUNTS', 'CONSENSUS')
+SEQS_TABLE_COLS = ('ID', 'CRAM', 'POS_COUNTS_XZ', 'INS_COUNTS_XZ', 'CONSENSUS_XZ')
 
 # base commands
 BASE_COMMAND_SAMTOOLS_VIEW_CRAM = [
@@ -46,11 +50,13 @@ class ViReaDB:
         Returns:
             ``ViReaDB`` object
         '''
+        lzma_decomp = LZMADecompressor()
         self.con = sqlite3.connect(db_fn)
         self.cur = self.con.cursor()
         self.version = self.cur.execute("SELECT val FROM meta WHERE key='VERSION'").fetchone()[0]
         self.ref_name = self.cur.execute("SELECT val FROM meta WHERE key='REF_NAME'").fetchone()[0]
-        self.ref_seq = self.cur.execute("SELECT val FROM meta WHERE key='REF_SEQ'").fetchone()[0]
+        ref_seq_xz = self.cur.execute("SELECT val FROM meta WHERE key='REF_SEQ_XZ'").fetchone()[0]
+        self.ref_seq = lzma_decomp.decompress(ref_seq_xz).decode()
         self.ref_len = len(self.ref_seq)
         self.ref_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.fas', buffering=bufsize)
         self.ref_f.write('%s\n%s\n' % (self.ref_name, self.ref_seq)); self.ref_f.flush()
@@ -158,7 +164,7 @@ class ViReaDB:
         if commit:
             self.commit()
 
-    def compute_counts(self, ID, overwrite=False, commit=True):
+    def compute_counts(self, ID, min_qual=DEFAULT_MIN_QUAL, bufsize=DEFAULT_BUFSIZE, overwrite=False, commit=True):
         '''Compute position and insertion counts for a given entry
 
         Args:
@@ -168,12 +174,55 @@ class ViReaDB:
 
             ``commit`` (``bool``): Commit database after updating this entry
         '''
-        tmp = self.cur.execute("SELECT POS_COUNTS, INS_COUNTS FROM seqs WHERE ID='%s'" % ID).fetchone()
+        # check for validity
+        tmp = self.cur.execute("SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
         if tmp is None:
             raise ValueError("ID doesn't exist in database: %s" % ID)
-        pos_counts, ins_counts = tmp
-        raise RuntimeError("TODO HERE")
+        cram_data, pos_counts_xz, ins_counts_xz = tmp
+        if pos_counts_xz is not None and ins_counts_xz is not None and not overwrite:
+            raise ValueError("Counts already exist for ID: %s" % ID)
 
+        # pull CRAM and compute counts
+        cram_f = NamedTemporaryFile('wb', prefix='vireadb', suffix='.cram', buffering=bufsize)
+        cram_f.write(cram_data); cram_f.flush(); aln = open_aln(cram_f.name, self.ref_f.name, threads=1)
+        pos_counts, ins_counts = compute_base_counts(aln, self.ref_len, min_qual=min_qual)
+        cram_f.close()
+
+        # compress and save counts
+        lzma_comp = LZMACompressor(preset=PRESET_EXTREME)
+        pos_counts_vf = BytesIO(); numpy.save(pos_counts_vf, pos_counts, allow_pickle=False); pos_counts_vf.seek(0)
+        pos_counts_xz = lzma_comp.compress(pos_counts_vf.read()) + lzma_comp.flush()
+        lzma_comp = LZMACompressor(preset=PRESET_EXTREME)
+        ins_counts_xz = lzma_comp.compress(json.dumps(ins_counts).encode("ascii")) + lzma_comp.flush()
+        self.cur.execute("UPDATE seqs SET POS_COUNTS_XZ=? WHERE ID=?", (pos_counts_xz, ID))
+        self.cur.execute("UPDATE seqs SET INS_COUNTS_XZ=? WHERE ID=?", (ins_counts_xz, ID))
+        if commit:
+            self.commit()
+
+    def compute_consensus(self, ID, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG, overwrite=False, commit=True):
+        # check for validity
+        tmp = self.cur.execute("SELECT POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
+        if tmp is None:
+            raise ValueError("ID doesn't exist in database: %s" % ID)
+        pos_counts_xz, ins_counts_xz, consensus_xz = tmp
+        if pos_counts_xz is None or ins_counts_xz is None:
+            raise ValueError("Must compute counts before computing consensus for ID: %s" % ID)
+        if consensus_xz is not None and not overwrite:
+            raise ValueError("Consensus already exists for ID: %s" % ID)
+
+        # decompress counts, compute consensus, and save
+        lzma_decomp = LZMADecompressor()
+        pos_counts = numpy.load(BytesIO(lzma_decomp.decompress(pos_counts_xz)), allow_pickle=False)
+        lzma_decomp = LZMADecompressor()
+        ins_counts = json.loads(lzma_decomp.decompress(ins_counts_xz).decode("ascii"))
+        consensus = compute_consensus(pos_counts, ins_counts, min_depth=min_depth, min_freq=min_freq, ambig=ambig)
+        lzma_comp = LZMACompressor(preset=PRESET_EXTREME)
+        consensus_xz = lzma_comp.compress(consensus.encode("ascii")) + lzma_comp.flush()
+        self.cur.execute("UPDATE seqs SET CONSENSUS_XZ=? WHERE ID=?", (consensus_xz, ID))
+        if commit:
+            self.commit()
+        print(consensus)
+        raise RuntimeError("TODO HERE")
 
 def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
     '''Create a new ViReaDB database
@@ -199,8 +248,12 @@ def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
         else:
             raise ValueError("db_fn exists: %s" % db_fn)
 
+    # prep for any compression
+    lzma_comp = LZMACompressor(preset=PRESET_EXTREME)
+
     # load reference genome
     ref_name, ref_seq = load_ref(ref_fn)
+    ref_seq_xz = lzma_comp.compress(ref_seq.encode("ascii")) + lzma_comp.flush()
 
     # index reference genome
     mmi_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.mmi', buffering=bufsize)
@@ -214,7 +267,7 @@ def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
     cur.execute("CREATE TABLE meta(%s)" % ', '.join(META_TABLE_COLS))
     cur.execute("INSERT INTO meta VALUES(?, ?)", ('VERSION', VERSION))
     cur.execute("INSERT INTO meta VALUES(?, ?)", ('REF_NAME', ref_name))
-    cur.execute("INSERT INTO meta VALUES(?, ?)", ('REF_SEQ', ref_seq))
+    cur.execute("INSERT INTO meta VALUES(?, ?)", ('REF_SEQ_XZ', ref_seq_xz))
     cur.execute("INSERT INTO meta VALUES(?, ?)", ('REF_MMI', mmi_data))
     cur.execute("CREATE TABLE seqs(%s)" % ', '.join(SEQS_TABLE_COLS))
     con.commit(); con.close()

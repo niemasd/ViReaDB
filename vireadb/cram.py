@@ -8,20 +8,12 @@ from .common import *
 from numpy import uintc, zeros
 import pysam
 
-# constants
-DEFAULT_MIN_QUAL = 20
-DEFAULT_MIN_DEPTH = 10
-DEFAULT_MIN_FREQ = 0.5
-DEFAULT_AMBIG = 'N'
-BASE_TO_NUM = {'A':0, 'C':1, 'G':2, 'T':3, None:4}
-NUM_TO_BASE = 'ACGT-'
-
 # open input CRAM file
-def open_aln(fn, threads=DEFAULT_THREADS):
-    if fn.lower() == 'stdin':
+def open_aln(fn, ref_fn, threads=DEFAULT_THREADS):
+    if isinstance(fn, str) and fn.lower() == 'stdin':
         fn = '-'
     tmp = pysam.set_verbosity(0) # disable htslib verbosity to avoid "no index file" warning
-    aln = pysam.AlignmentFile(fn, mode='r', reference_filename=args.reference)
+    aln = pysam.AlignmentFile(fn, mode='r', reference_filename=ref_fn, threads=threads)
     pysam.set_verbosity(tmp) # re-enable htslib verbosity and finish up
     return aln
 
@@ -52,7 +44,7 @@ def compute_base_counts(aln, ref_len, min_qual=DEFAULT_MIN_QUAL):
                     deletion_end_inds[-1] = pair_ind
                 else:
                     deletion_start_inds.append(pair_ind); deletion_end_inds.append(pair_ind)
-            elif read_pos < aln_start or read_pos >= aln_end or quals[read_pos] < args.min_qual:
+            elif read_pos < aln_start or read_pos >= aln_end or quals[read_pos] < min_qual:
                 continue # skip soft-clipped or low-quality bases
             elif ref_pos is None: # insertion
                 if len(insertion_end_inds) != 0 and insertion_end_inds[-1] == pair_ind-1:
@@ -73,7 +65,7 @@ def compute_base_counts(aln, ref_len, min_qual=DEFAULT_MIN_QUAL):
                 next_read_pos, next_ref_pos = aligned_pairs[insertion_end_ind+1]
                 if next_read_pos >= aln_end:
                     continue # this insertion is right before a soft-clipped end, so skip
-                if quals[prev_read_pos] < args.min_qual or quals[next_read_pos] < args.min_qual:
+                if quals[prev_read_pos] < min_qual or quals[next_read_pos] < min_qual:
                     continue # base just before or just after this insertion is low quality, so skip
                 ins_seq = seq[aligned_pairs[insertion_start_ind][0] : aligned_pairs[insertion_end_ind][0]+1]
                 if next_ref_pos not in ins_counts:
@@ -95,7 +87,7 @@ def compute_base_counts(aln, ref_len, min_qual=DEFAULT_MIN_QUAL):
                 next_read_pos = aligned_pairs[deletion_end_ind+1][0]
                 if next_read_pos >= aln_end:
                     continue # this deletion is right before a soft-clipped end, so skip
-                if quals[prev_read_pos] < args.min_qual or quals[next_read_pos] < args.min_qual:
+                if quals[prev_read_pos] < min_qual or quals[next_read_pos] < min_qual:
                     continue # base just before or just after this deletion is low quality, so skip
                 for deletion_ind in range(deletion_start_ind, deletion_end_ind+1):
                     pos_counts[aligned_pairs[deletion_ind][1]][4] += 1 # '-' = 4
@@ -103,7 +95,7 @@ def compute_base_counts(aln, ref_len, min_qual=DEFAULT_MIN_QUAL):
     return pos_counts, ins_counts
 
 # generate consensus sequence
-def generate_consensus(pos_counts, ins_counts, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG):
+def compute_consensus(pos_counts, ins_counts, min_depth=DEFAULT_MIN_DEPTH, min_freq=DEFAULT_MIN_FREQ, ambig=DEFAULT_AMBIG):
     parts = ['']*(len(pos_counts)+len(ins_counts)); ind = 0
     pos_count_tots = [float(sum(row)) for row in pos_counts]
     for ref_pos in range(len(pos_counts)+1):

@@ -11,6 +11,12 @@ from sys import stderr
 VERSION = '0.0.1'
 DEFAULT_BUFSIZE = 1048576 # 1 MB
 DEFAULT_THREADS = 1
+DEFAULT_MIN_QUAL = 20
+DEFAULT_MIN_DEPTH = 10
+DEFAULT_MIN_FREQ = 0.5
+DEFAULT_AMBIG = 'N'
+BASE_TO_NUM = {'A':0, 'C':1, 'G':2, 'T':3, None:4}
+NUM_TO_BASE = 'ACGT-'
 
 def print_log(s='', end='\n'):
     '''Print log message to standard error
