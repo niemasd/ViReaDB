@@ -12,6 +12,7 @@ from io import BytesIO # TODO DELETE
 from lzma import LZMACompressor, LZMADecompressor, PRESET_EXTREME # TODO DELETE
 from os import remove
 from os.path import isdir, isfile
+from shutil import copyfile
 from subprocess import call, check_output, DEVNULL, PIPE, Popen
 from sys import argv
 from tempfile import NamedTemporaryFile
@@ -197,7 +198,7 @@ class ViReaDB:
         Args:
             ``other`` (``vireadb.ViReaDB``): The other database from which to add all entries
 
-            ``check_meta`` (``bool``): Check that the metadata are identical across the two databases
+            ``check_meta`` (``bool``): Check that the metadata are identical across the two databases. Should only be skipped if user is already guaranteed that they match
 
             ``check_unique`` (``bool``): Check that every ID is unique (i.e., no IDs in ``other`` already exist in the calling object). Should only be skipped if user is already guaranteed to not have duplicates
 
@@ -408,6 +409,8 @@ def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
 
         ``overwrite`` (``bool``): Overwrite ``db_fn`` if it already exists
 
+        ``bufsize`` (``int``): Buffer size for reading from file
+
     Returns:
         ``ViReaDB`` object
     '''
@@ -459,3 +462,41 @@ def load_db(db_fn):
     if not isfile(db_fn):
         raise ValueError("db_fn not found: %s" % db_fn)
     return ViReaDB(db_fn)
+
+def merge_dbs(out_db_fn, in_db_fns, check_meta=True, overwrite=False, bufsize=DEFAULT_BUFSIZE):
+    '''Merge multiple ViReaDB databases
+
+    Args:
+        ``out_db_fn`` (``str``): The filename of the SQLite3 database file representing the output database
+
+        ``in_db_fns`` (``list``): The filenames of the SQLite3 databases representing the input databases
+
+        ``check_meta`` (``bool``): Check that the metadata are identical across the databases. Should only be skipped if user is already guaranteed that they match
+
+        ``overwrite`` (``bool``): Overwrite ``db_fn`` if it already exists
+
+        ``bufsize`` (``int``): Buffer size for reading from file
+
+    Returns:
+        ``ViReaDB`` object
+    '''
+    # validity check
+    for in_db_fn in in_db_fns:
+        if not isfile(in_db_fn):
+            raise ValueError("Input database file not found: %s" % in_db_fn)
+    if isfile(out_db_fn):
+        if overwrite:
+            remove(out_db_fn)
+        else:
+            raise ValueError("out_db_fn exists: %s" % out_db_fn)
+
+    # merge databases
+    copyfile(in_db_fns[0], out_db_fn)
+    out_db = load_db(out_db_fn); out_db_meta = out_db.get_meta()
+    for in_db_fn in in_db_fns[1:]:
+        curr_db = load_db(in_db_fn)
+        if check_meta and out_db_meta != curr_db.get_meta():
+            del out_db; remove(out_db_fn)
+            raise TypeError("Metadata of the databases do not match")
+        out_db.add_all_entries(curr_db)
+    return out_db
