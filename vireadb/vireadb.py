@@ -99,6 +99,14 @@ class ViReaDB:
         '''Commit the SQLite3 database'''
         self.con.commit()
 
+    def get_meta(self):
+        '''Get the metadata from this ``ViReaDB`` database
+
+        Returns:
+            ``dict`` object containing the metadata of this ``ViReaDB`` database
+        '''
+        return {'VERSION':self.version, 'REF_NAME':self.ref_name, 'REF_SEQ': self.ref_seq}
+
     def add_entry(self, ID, reads_fn, filetype=None, include_unmapped=False, bufsize=DEFAULT_BUFSIZE, threads=DEFAULT_THREADS, commit=True):
         '''Add a CRAM/BAM/SAM/FASTQ entry to this database. CRAM inputs are added exactly as-is.
 
@@ -175,6 +183,25 @@ class ViReaDB:
         # add this CRAM to the database
         curr_row = (ID, cram_data, None, None, None)
         self.cur.execute("INSERT INTO seqs VALUES(?, ?, ?, ?, ?)", curr_row)
+        if commit:
+            self.commit()
+
+    def add_all_entries(self, other, check_meta=True, commit=True):
+        '''Add all entries from another ViReaDB database into this one
+
+        Args:
+            ``other`` (``vireadb.ViReaDB``): The other database from which to add all entries
+
+            ``check_meta`` (``bool`): Check that the metadata are identical across the two databases
+
+            ``commit`` (``bool``): Commit database after removing this entry
+        '''
+        if not isinstance(other, type(self)):
+            raise TypeError("Other database must be ViReaDB object, but it was: %s" % str(type(other)))
+        if check_meta and self.get_meta() != other.get_meta():
+            raise TypeError("Metadata of the databases do not match")
+        for curr_row in other.cur.execute("SELECT * FROM seqs").fetchall():
+            self.cur.execute("INSERT INTO seqs VALUES(?, ?, ?, ?, ?)", curr_row)
         if commit:
             self.commit()
 
