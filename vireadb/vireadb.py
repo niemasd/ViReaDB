@@ -93,7 +93,7 @@ class ViReaDB:
         Returns:
             ``True`` if ``ID`` exists, otherwise ``False``
         '''
-        return self.cur.execute("SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone() is not None
+        return self.cur.execute("SELECT COUNT(*) FROM seqs WHERE ID='%s' LIMIT 1" % ID).fetchone()[0] != 0
 
     def commit(self):
         '''Commit the SQLite3 database'''
