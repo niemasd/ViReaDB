@@ -1,4 +1,4 @@
-# Minimal Docker image for samtools v1.16.1 using Alpine base
+# Minimal Docker image for vireadb using Alpine base
 FROM alpine:3.13.5
 MAINTAINER Niema Moshiri <niemamoshiri@gmail.com>
 
