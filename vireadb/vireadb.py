@@ -227,6 +227,16 @@ class ViReaDB:
         if commit:
             self.commit()
 
+    def clear(self, commit=True):
+        '''Remove all entries from this database
+
+        Args:
+            ``commit`` (``bool``): Commit database after removing all entries
+        '''
+        self.cur.execute("DELETE FROM seqs")
+        if commit:
+            self.commit()
+
     def get_entry(self, ID):
         '''Return the data of an entry associated with a given ID in this database
 
