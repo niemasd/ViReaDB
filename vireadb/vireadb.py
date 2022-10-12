@@ -84,6 +84,17 @@ class ViReaDB:
         '''Shorthand for del_entry(ID)'''
         self.del_entry(ID)
 
+    def __contains__(self, ID):
+        '''Check if ID exists in this database
+
+        Args:
+            ``ID`` (``str``): The ID to check
+
+        Returns:
+            ``True`` if ``ID`` exists, otherwise ``False``
+        '''
+        return self.cur.execute("SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone() is not None
+
     def commit(self):
         '''Commit the SQLite3 database'''
         self.con.commit()
