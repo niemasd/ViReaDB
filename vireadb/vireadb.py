@@ -186,13 +186,15 @@ class ViReaDB:
         if commit:
             self.commit()
 
-    def add_all_entries(self, other, check_meta=True, commit=True):
+    def add_all_entries(self, other, check_meta=True, check_unique=True, commit=True):
         '''Add all entries from another ViReaDB database into this one
 
         Args:
             ``other`` (``vireadb.ViReaDB``): The other database from which to add all entries
 
-            ``check_meta`` (``bool`): Check that the metadata are identical across the two databases
+            ``check_meta`` (``bool``): Check that the metadata are identical across the two databases
+
+            ``check_unique`` (``bool``): Check that every ID is unique (i.e., no IDs in ``other`` already exist in the calling object)
 
             ``commit`` (``bool``): Commit database after removing this entry
         '''
@@ -201,7 +203,10 @@ class ViReaDB:
         if check_meta and self.get_meta() != other.get_meta():
             raise TypeError("Metadata of the databases do not match")
         for curr_row in other.cur.execute("SELECT * FROM seqs").fetchall():
-            self.cur.execute("INSERT INTO seqs VALUES(?, ?, ?, ?, ?)", curr_row)
+            if check_unique and curr_row[0] in self:
+                warn("Duplicate ID not added: %s" % curr_row[0])
+            else:
+                self.cur.execute("INSERT INTO seqs VALUES(?, ?, ?, ?, ?)", curr_row)
         if commit:
             self.commit()
 
