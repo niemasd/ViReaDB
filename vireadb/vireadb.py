@@ -463,7 +463,7 @@ def load_db(db_fn):
         raise ValueError("db_fn not found: %s" % db_fn)
     return ViReaDB(db_fn)
 
-def merge_dbs(out_db_fn, in_db_fns, check_meta=True, overwrite=False, bufsize=DEFAULT_BUFSIZE):
+def merge_dbs(out_db_fn, in_db_fns, check_meta=True, overwrite=False):
     '''Merge multiple ViReaDB databases
 
     Args:
@@ -474,8 +474,6 @@ def merge_dbs(out_db_fn, in_db_fns, check_meta=True, overwrite=False, bufsize=DE
         ``check_meta`` (``bool``): Check that the metadata are identical across the databases. Should only be skipped if user is already guaranteed that they match
 
         ``overwrite`` (``bool``): Overwrite ``db_fn`` if it already exists
-
-        ``bufsize`` (``int``): Buffer size for reading from file
 
     Returns:
         ``ViReaDB`` object
