@@ -1,0 +1,543 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>vireadb.vireadb &#8212; vireadb  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/classic.css" />
+    
+    <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+    <script src="../../_static/jquery.js"></script>
+    <script src="../../_static/underscore.js"></script>
+    <script src="../../_static/doctools.js"></script>
+    
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">vireadb  documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">vireadb.vireadb</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for vireadb.vireadb</h1><div class="highlight"><pre>
+<span></span><span class="ch">#! /usr/bin/env python3</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">vireadb: Viral Read Database</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="c1"># imports</span>
+<span class="kn">from</span> <span class="nn">.common</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">.compress</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">.cram</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">.fasta</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BytesIO</span> <span class="c1"># TODO DELETE</span>
+<span class="kn">from</span> <span class="nn">lzma</span> <span class="kn">import</span> <span class="n">LZMACompressor</span><span class="p">,</span> <span class="n">LZMADecompressor</span><span class="p">,</span> <span class="n">PRESET_EXTREME</span> <span class="c1"># TODO DELETE</span>
+<span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">remove</span>
+<span class="kn">from</span> <span class="nn">os.path</span> <span class="kn">import</span> <span class="n">isdir</span><span class="p">,</span> <span class="n">isfile</span>
+<span class="kn">from</span> <span class="nn">subprocess</span> <span class="kn">import</span> <span class="n">call</span><span class="p">,</span> <span class="n">check_output</span><span class="p">,</span> <span class="n">DEVNULL</span><span class="p">,</span> <span class="n">PIPE</span><span class="p">,</span> <span class="n">Popen</span>
+<span class="kn">from</span> <span class="nn">sys</span> <span class="kn">import</span> <span class="n">argv</span>
+<span class="kn">from</span> <span class="nn">tempfile</span> <span class="kn">import</span> <span class="n">NamedTemporaryFile</span>
+<span class="kn">from</span> <span class="nn">warnings</span> <span class="kn">import</span> <span class="n">warn</span>
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">import</span> <span class="nn">numpy</span>
+<span class="kn">import</span> <span class="nn">sqlite3</span>
+
+<span class="c1"># constants</span>
+<span class="n">META_TABLE_COLS</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;key&#39;</span><span class="p">,</span> <span class="s1">&#39;val&#39;</span><span class="p">)</span>
+<span class="n">SEQS_TABLE_COLS</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;ID&#39;</span><span class="p">,</span> <span class="s1">&#39;CRAM&#39;</span><span class="p">,</span> <span class="s1">&#39;POS_COUNTS_XZ&#39;</span><span class="p">,</span> <span class="s1">&#39;INS_COUNTS_XZ&#39;</span><span class="p">,</span> <span class="s1">&#39;CONSENSUS_XZ&#39;</span><span class="p">)</span>
+
+<span class="c1"># base commands</span>
+<span class="n">BASE_COMMAND_SAMTOOLS_VIEW_CRAM</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;samtools&#39;</span><span class="p">,</span> <span class="s1">&#39;view&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;--output-fmt-option&#39;</span><span class="p">,</span> <span class="s1">&#39;version=3.0&#39;</span><span class="p">,</span> <span class="c1"># TODO update to 3.1 when stable</span>
+    <span class="s1">&#39;--output-fmt-option&#39;</span><span class="p">,</span> <span class="s1">&#39;use_lzma=1&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;--output-fmt-option&#39;</span><span class="p">,</span> <span class="s1">&#39;archive=1&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;--output-fmt-option&#39;</span><span class="p">,</span> <span class="s1">&#39;level=9&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;--output-fmt-option&#39;</span><span class="p">,</span> <span class="s1">&#39;lossy_names=1&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;-C&#39;</span><span class="p">,</span> <span class="c1"># CRAM output</span>
+<span class="p">]</span>
+<span class="n">BASE_COMMAND_MINIMAP2</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;minimap2&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;-x&#39;</span><span class="p">,</span> <span class="s1">&#39;sr&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<div class="viewcode-block" id="ViReaDB"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB">[docs]</a><span class="k">class</span> <span class="nc">ViReaDB</span><span class="p">:</span>
+    <span class="sd">&#39;&#39;&#39;``ViReaDB`` database class&#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">db_fn</span><span class="p">,</span> <span class="n">bufsize</span><span class="o">=</span><span class="n">DEFAULT_BUFSIZE</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;``ViReaDB`` constructor</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``db_fn`` (``str``): The filename of the SQLite3 database file representing this database</span>
+
+<span class="sd">            ``bufsize`` (``int``): Buffer size for reading from file</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ``ViReaDB`` object</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">con</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">db_fn</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">con</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT val FROM meta WHERE key=&#39;VERSION&#39; LIMIT 1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ref_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT val FROM meta WHERE key=&#39;REF_NAME&#39; LIMIT 1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">ref_seq_xz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT val FROM meta WHERE key=&#39;REF_SEQ_XZ&#39; LIMIT 1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ref_seq</span> <span class="o">=</span> <span class="n">decompress_seq</span><span class="p">(</span><span class="n">ref_seq_xz</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ref_len</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ref_seq</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ref_f</span> <span class="o">=</span> <span class="n">NamedTemporaryFile</span><span class="p">(</span><span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s1">&#39;vireadb&#39;</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s1">&#39;.fas&#39;</span><span class="p">,</span> <span class="n">buffering</span><span class="o">=</span><span class="n">bufsize</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ref_f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="se">\n</span><span class="si">%s</span><span class="se">\n</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ref_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_seq</span><span class="p">));</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_f</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mmi_f</span> <span class="o">=</span> <span class="n">NamedTemporaryFile</span><span class="p">(</span><span class="s1">&#39;wb&#39;</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s1">&#39;vireadb&#39;</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s1">&#39;.mmi&#39;</span><span class="p">,</span> <span class="n">buffering</span><span class="o">=</span><span class="n">bufsize</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mmi_f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT val FROM meta WHERE key=&#39;REF_MMI&#39; LIMIT 1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]);</span> <span class="bp">self</span><span class="o">.</span><span class="n">mmi_f</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;``ViReaDB`` destructor&#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">con</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Return the number of entries in this database</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The number of entries in this database</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT COUNT(*) FROM seqs&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Shorthand for get_entry(ID)&#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_entry</span><span class="p">(</span><span class="n">ID</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__delitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Shorthand for del_entry(ID)&#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">del_entry</span><span class="p">(</span><span class="n">ID</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Check if ID exists in this database</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``ID`` (``str``): The ID to check</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ``True`` if ``ID`` exists, otherwise ``False``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT COUNT(*) FROM seqs WHERE ID=&#39;</span><span class="si">%s</span><span class="s2">&#39; LIMIT 1&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT * FROM seqs&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">fetchall</span><span class="p">())</span>
+
+<div class="viewcode-block" id="ViReaDB.commit"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.commit">[docs]</a>    <span class="k">def</span> <span class="nf">commit</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Commit the SQLite3 database&#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">con</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="ViReaDB.get_meta"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.get_meta">[docs]</a>    <span class="k">def</span> <span class="nf">get_meta</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Get the metadata from this ``ViReaDB`` database</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ``dict`` object containing the metadata of this ``ViReaDB`` database</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;VERSION&#39;</span><span class="p">:</span><span class="bp">self</span><span class="o">.</span><span class="n">version</span><span class="p">,</span> <span class="s1">&#39;REF_NAME&#39;</span><span class="p">:</span><span class="bp">self</span><span class="o">.</span><span class="n">ref_name</span><span class="p">,</span> <span class="s1">&#39;REF_SEQ&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_seq</span><span class="p">}</span></div>
+
+<div class="viewcode-block" id="ViReaDB.add_entry"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.add_entry">[docs]</a>    <span class="k">def</span> <span class="nf">add_entry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">,</span> <span class="n">reads_fn</span><span class="p">,</span> <span class="n">filetype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">include_unmapped</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">bufsize</span><span class="o">=</span><span class="n">DEFAULT_BUFSIZE</span><span class="p">,</span> <span class="n">threads</span><span class="o">=</span><span class="n">DEFAULT_THREADS</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Add a CRAM/BAM/SAM/FASTQ entry to this database. CRAM inputs are added exactly as-is.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``ID`` (``str``): The unique ID of the entry to add</span>
+
+<span class="sd">            ``reads_fn`` (``str``): The input reads file. Can provide list of multiple files if FASTQ</span>
+
+<span class="sd">            ``filetype`` (``str``): The format of the input reads file (CRAM, BAM, SAM, or FASTQ), or None to infer from ``reads_fn``</span>
+
+<span class="sd">            ``include_unmapped`` (``bool``): Include unmapped reads when converting from non-CRAM formats</span>
+
+<span class="sd">            ``bufsize`` (``int``): Buffer size for reading from file</span>
+<span class="sd">            </span>
+<span class="sd">            ``threads`` (``int``): Number of threads to use for compression</span>
+
+<span class="sd">            ``commit`` (``bool``): Commit database after adding this entry</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="c1"># check for validity</span>
+        <span class="k">if</span> <span class="n">ID</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;ID already exists in database: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reads_fn</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">reads_fn</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Must specify at least 1 reads file&quot;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">reads_fn</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">reads_fn</span> <span class="o">=</span> <span class="n">reads_fn</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reads_fn</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">isfile</span><span class="p">(</span><span class="n">reads_fn</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;File not found: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">reads_fn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">filetype</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reads_fn</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">filetype</span> <span class="o">=</span> <span class="n">reads_fn</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">&#39;.GZ&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">reads_fn</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">filetype</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">filetype</span> <span class="o">=</span> <span class="n">fn</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">&#39;.GZ&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                    <span class="k">elif</span> <span class="n">filetype</span> <span class="o">!=</span> <span class="n">fn</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">&#39;.GZ&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;All reads_fn arguments must be the same filetype&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">filetype</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Invalid filetype: </span><span class="si">%s</span><span class="s2"> (must be CRAM, BAM, SAM, or FASTQ)&quot;</span> <span class="o">%</span> <span class="n">filetype</span><span class="p">)</span>
+        <span class="n">filetype</span> <span class="o">=</span> <span class="n">filetype</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reads_fn</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">filetype</span> <span class="o">!=</span> <span class="s1">&#39;FASTQ&#39;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Can only provide multiple reads files for FASTQ&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">threads</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">threads</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid number of threads: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">threads</span><span class="p">)</span>
+
+        <span class="c1"># prep samtools and minimap2 commands</span>
+        <span class="n">command_samtools_view_cram</span> <span class="o">=</span> <span class="n">BASE_COMMAND_SAMTOOLS_VIEW_CRAM</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;-T&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_f</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s1">&#39;-@&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">threads</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">include_unmapped</span><span class="p">:</span>
+            <span class="n">command_samtools_view_cram</span> <span class="o">+=</span> <span class="p">[</span><span class="s1">&#39;-F&#39;</span><span class="p">,</span> <span class="s1">&#39;4&#39;</span><span class="p">]</span> <span class="c1"># only include mapped reads</span>
+        <span class="n">command_minimap2</span> <span class="o">=</span> <span class="n">BASE_COMMAND_MINIMAP2</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;-a&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mmi_f</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+
+        <span class="c1"># handle CRAM (just read all data)</span>
+        <span class="k">if</span> <span class="n">filetype</span> <span class="o">==</span> <span class="s1">&#39;CRAM&#39;</span><span class="p">:</span>
+            <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">reads_fn</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">,</span> <span class="n">buffering</span><span class="o">=</span><span class="n">bufsize</span><span class="p">);</span> <span class="n">cram_data</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">();</span> <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+        <span class="c1"># handle BAM/SAM (convert to CRAM)</span>
+        <span class="k">elif</span> <span class="n">filetype</span> <span class="o">==</span> <span class="s1">&#39;BAM&#39;</span> <span class="ow">or</span> <span class="n">filetype</span> <span class="o">==</span> <span class="s1">&#39;SAM&#39;</span><span class="p">:</span>
+            <span class="n">cram_data</span> <span class="o">=</span> <span class="n">check_output</span><span class="p">(</span><span class="n">command_samtools_view_cram</span> <span class="o">+</span> <span class="p">[</span><span class="n">reads_fn</span><span class="p">])</span>
+
+        <span class="c1"># handle FASTQ (map to ref + convert to CRAM)</span>
+        <span class="k">elif</span> <span class="n">filetype</span> <span class="o">==</span> <span class="s1">&#39;FASTQ&#39;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reads_fn</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">command_minimap2</span> <span class="o">+=</span> <span class="p">[</span><span class="n">reads_fn</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">command_minimap2</span> <span class="o">+=</span> <span class="n">reads_fn</span>
+            <span class="n">p_minimap2</span> <span class="o">=</span> <span class="n">Popen</span><span class="p">(</span><span class="n">command_minimap2</span><span class="p">,</span> <span class="n">stdout</span><span class="o">=</span><span class="n">PIPE</span><span class="p">,</span> <span class="n">stderr</span><span class="o">=</span><span class="n">DEVNULL</span><span class="p">)</span>
+            <span class="n">cram_data</span> <span class="o">=</span> <span class="n">check_output</span><span class="p">(</span><span class="n">command_samtools_view_cram</span><span class="p">,</span> <span class="n">stdin</span><span class="o">=</span><span class="n">p_minimap2</span><span class="o">.</span><span class="n">stdout</span><span class="p">)</span>
+            <span class="n">p_minimap2</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+
+        <span class="c1"># invalid filetype</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Invalid filetype: </span><span class="si">%s</span><span class="s2"> (must be CRAM, BAM, or SAM)&quot;</span> <span class="o">%</span> <span class="n">filetype</span><span class="p">)</span>
+
+        <span class="c1"># add this CRAM to the database</span>
+        <span class="n">curr_row</span> <span class="o">=</span> <span class="p">(</span><span class="n">ID</span><span class="p">,</span> <span class="n">cram_data</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;INSERT INTO seqs VALUES(?, ?, ?, ?, ?)&quot;</span><span class="p">,</span> <span class="n">curr_row</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">commit</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="ViReaDB.add_all_entries"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.add_all_entries">[docs]</a>    <span class="k">def</span> <span class="nf">add_all_entries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">,</span> <span class="n">check_meta</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">check_unique</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Add all entries from another ViReaDB database into this one</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``other`` (``vireadb.ViReaDB``): The other database from which to add all entries</span>
+
+<span class="sd">            ``check_meta`` (``bool``): Check that the metadata are identical across the two databases</span>
+
+<span class="sd">            ``check_unique`` (``bool``): Check that every ID is unique (i.e., no IDs in ``other`` already exist in the calling object)</span>
+
+<span class="sd">            ``commit`` (``bool``): Commit database after removing this entry</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Other database must be ViReaDB object, but it was: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">other</span><span class="p">)))</span>
+        <span class="k">if</span> <span class="n">check_meta</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_meta</span><span class="p">()</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">get_meta</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Metadata of the databases do not match&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">curr_row</span> <span class="ow">in</span> <span class="n">other</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">check_unique</span> <span class="ow">and</span> <span class="n">curr_row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+                <span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Duplicate ID not added: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">curr_row</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;INSERT INTO seqs VALUES(?, ?, ?, ?, ?)&quot;</span><span class="p">,</span> <span class="n">curr_row</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">commit</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="ViReaDB.del_entry"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.del_entry">[docs]</a>    <span class="k">def</span> <span class="nf">del_entry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Remove an entry to this database</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``ID`` (``str``): The unique ID of the entry to remove</span>
+
+<span class="sd">            ``commit`` (``bool``): Commit database after removing this entry</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">ID</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;ID doesn&#39;t exist in database: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;DELETE FROM seqs WHERE ID=&#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">commit</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="ViReaDB.clear"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.clear">[docs]</a>    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Remove all entries from this database</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``commit`` (``bool``): Commit database after removing all entries</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;DELETE FROM seqs&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">commit</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="ViReaDB.get_entry"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.get_entry">[docs]</a>    <span class="k">def</span> <span class="nf">get_entry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Return the data of an entry associated with a given ID in this database</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``ID`` (``str``): The unique ID of the entry to retrieve</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ``bytes`` object containing the CRAM data of the reads</span>
+<span class="sd">            </span>
+<span class="sd">            ``numpy.array`` object containing the position counts</span>
+<span class="sd">            </span>
+<span class="sd">            ``dict`` object containing the insertion counts</span>
+<span class="sd">            </span>
+<span class="sd">            ``str`` object containing the consensus sequence</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID=&#39;</span><span class="si">%s</span><span class="s2">&#39; LIMIT 1&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">tmp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;ID doesn&#39;t exist in database: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="n">cram</span><span class="p">,</span> <span class="n">pos_counts_xz</span><span class="p">,</span> <span class="n">ins_counts_xz</span><span class="p">,</span> <span class="n">consensus_xz</span> <span class="o">=</span> <span class="n">tmp</span>
+        <span class="k">return</span> <span class="n">cram</span><span class="p">,</span> <span class="n">decompress_pos_counts</span><span class="p">(</span><span class="n">pos_counts_xz</span><span class="p">),</span> <span class="n">decompress_ins_counts</span><span class="p">(</span><span class="n">ins_counts_xz</span><span class="p">),</span> <span class="n">decompress_seq</span><span class="p">(</span><span class="n">consensus_xz</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ViReaDB.get_IDs"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.get_IDs">[docs]</a>    <span class="k">def</span> <span class="nf">get_IDs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Return the IDs in this database</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ``list`` object containing all of the IDs in this database</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT ID FROM seqs&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()]</span></div>
+
+<div class="viewcode-block" id="ViReaDB.compute_counts"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.compute_counts">[docs]</a>    <span class="k">def</span> <span class="nf">compute_counts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">,</span> <span class="n">min_qual</span><span class="o">=</span><span class="n">DEFAULT_MIN_QUAL</span><span class="p">,</span> <span class="n">bufsize</span><span class="o">=</span><span class="n">DEFAULT_BUFSIZE</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Compute position and insertion counts for a given entry</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``ID`` (``str``): The unique ID of the entry whose counts to compute</span>
+
+<span class="sd">            ``min_qual`` (``int``): Minimum base quality to count base</span>
+
+<span class="sd">            ``bufsize`` (``int``): Buffer size for reading from file</span>
+
+<span class="sd">            ``overwrite`` (``bool``): ``True`` to recompute (and overwrite) counts if they already exist</span>
+
+<span class="sd">            ``commit`` (``bool``): Commit database after updating this entry</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="c1"># check for validity</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ FROM seqs WHERE ID=&#39;</span><span class="si">%s</span><span class="s2">&#39; LIMIT 1&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">tmp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;ID doesn&#39;t exist in database: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="n">cram_data</span><span class="p">,</span> <span class="n">pos_counts_xz</span><span class="p">,</span> <span class="n">ins_counts_xz</span> <span class="o">=</span> <span class="n">tmp</span>
+        <span class="k">if</span> <span class="n">pos_counts_xz</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">ins_counts_xz</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">overwrite</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Counts already exist for ID: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+
+        <span class="c1"># pull CRAM and compute counts</span>
+        <span class="n">cram_f</span> <span class="o">=</span> <span class="n">NamedTemporaryFile</span><span class="p">(</span><span class="s1">&#39;wb&#39;</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s1">&#39;vireadb&#39;</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s1">&#39;.cram&#39;</span><span class="p">,</span> <span class="n">buffering</span><span class="o">=</span><span class="n">bufsize</span><span class="p">)</span>
+        <span class="n">cram_f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">cram_data</span><span class="p">);</span> <span class="n">cram_f</span><span class="o">.</span><span class="n">flush</span><span class="p">();</span> <span class="n">aln</span> <span class="o">=</span> <span class="n">open_aln</span><span class="p">(</span><span class="n">cram_f</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_f</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">threads</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">pos_counts</span><span class="p">,</span> <span class="n">ins_counts</span> <span class="o">=</span> <span class="n">compute_base_counts</span><span class="p">(</span><span class="n">aln</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_len</span><span class="p">,</span> <span class="n">min_qual</span><span class="o">=</span><span class="n">min_qual</span><span class="p">)</span>
+        <span class="n">cram_f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+        <span class="c1"># compress and save counts</span>
+        <span class="n">pos_counts_xz</span> <span class="o">=</span> <span class="n">compress_pos_counts</span><span class="p">(</span><span class="n">pos_counts</span><span class="p">)</span>
+        <span class="n">ins_counts_xz</span> <span class="o">=</span> <span class="n">compress_ins_counts</span><span class="p">(</span><span class="n">ins_counts</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;UPDATE seqs SET POS_COUNTS_XZ=? WHERE ID=?&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">pos_counts_xz</span><span class="p">,</span> <span class="n">ID</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;UPDATE seqs SET INS_COUNTS_XZ=? WHERE ID=?&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">ins_counts_xz</span><span class="p">,</span> <span class="n">ID</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">commit</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="ViReaDB.get_counts"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.get_counts">[docs]</a>    <span class="k">def</span> <span class="nf">get_counts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Return the position and insertion counts for a given entry</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``ID`` (``str``): The unique ID of the entry whose counts to return</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The position counts for ``ID`` (or ``None`` if not yet computed)</span>
+
+<span class="sd">            The insertion counts for ``ID`` (or ``None`` if not yet computed)</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT POS_COUNTS_XZ, INS_COUNTS_XZ FROM seqs WHERE ID=&#39;</span><span class="si">%s</span><span class="s2">&#39; LIMIT 1&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">tmp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;ID doesn&#39;t exist in database: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="n">pos_counts_xz</span><span class="p">,</span> <span class="n">ins_counts_xz</span> <span class="o">=</span> <span class="n">tmp</span>
+        <span class="n">pos_counts</span> <span class="o">=</span> <span class="n">decompress_pos_counts</span><span class="p">(</span><span class="n">pos_counts_xz</span><span class="p">)</span>
+        <span class="n">ins_counts</span> <span class="o">=</span> <span class="n">decompress_ins_counts</span><span class="p">(</span><span class="n">ins_counts_xz</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pos_counts</span><span class="p">,</span> <span class="n">ins_counts</span></div>
+
+<div class="viewcode-block" id="ViReaDB.compute_consensus"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.compute_consensus">[docs]</a>    <span class="k">def</span> <span class="nf">compute_consensus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">,</span> <span class="n">min_depth</span><span class="o">=</span><span class="n">DEFAULT_MIN_DEPTH</span><span class="p">,</span> <span class="n">min_freq</span><span class="o">=</span><span class="n">DEFAULT_MIN_FREQ</span><span class="p">,</span> <span class="n">ambig</span><span class="o">=</span><span class="n">DEFAULT_AMBIG</span><span class="p">,</span> <span class="n">remove_gaps</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Compute the consensus sequence for a given entry. The position and insertion counts must have already been computed</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``ID`` (``str``): The unique ID of the entry whose counts to compute</span>
+
+<span class="sd">            ``min_depth`` (``int``): Minimum depth to call base/insertion in consensus</span>
+
+<span class="sd">            ``min_freq`` (``float``): Minimum frequency [0,1] to call base/insertion in consensus</span>
+
+<span class="sd">            ``ambig`` (``str``): Symbol to use for ambiguous bases in consensus</span>
+
+<span class="sd">            ``remove_gaps`` (``bool``): Remove gap characters (``-``) from consensus</span>
+
+<span class="sd">            ``overwrite`` (``bool``): ``True`` to recompute (and overwrite) counts if they already exist</span>
+
+<span class="sd">            ``commit`` (``bool``): Commit database after updating this entry</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="c1"># check for validity</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID=&#39;</span><span class="si">%s</span><span class="s2">&#39; LIMIT 1&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">tmp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;ID doesn&#39;t exist in database: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="n">pos_counts_xz</span><span class="p">,</span> <span class="n">ins_counts_xz</span><span class="p">,</span> <span class="n">consensus_xz</span> <span class="o">=</span> <span class="n">tmp</span>
+        <span class="k">if</span> <span class="n">pos_counts_xz</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">ins_counts_xz</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Must compute counts before computing consensus for ID: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">consensus_xz</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">overwrite</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Consensus already exists for ID: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+
+        <span class="c1"># decompress counts, compute consensus, and save</span>
+        <span class="n">pos_counts</span> <span class="o">=</span> <span class="n">decompress_pos_counts</span><span class="p">(</span><span class="n">pos_counts_xz</span><span class="p">)</span>
+        <span class="n">ins_counts</span> <span class="o">=</span> <span class="n">decompress_ins_counts</span><span class="p">(</span><span class="n">ins_counts_xz</span><span class="p">)</span>
+        <span class="n">consensus</span> <span class="o">=</span> <span class="n">compute_consensus</span><span class="p">(</span><span class="n">pos_counts</span><span class="p">,</span> <span class="n">ins_counts</span><span class="p">,</span> <span class="n">min_depth</span><span class="o">=</span><span class="n">min_depth</span><span class="p">,</span> <span class="n">min_freq</span><span class="o">=</span><span class="n">min_freq</span><span class="p">,</span> <span class="n">ambig</span><span class="o">=</span><span class="n">ambig</span><span class="p">)</span>
+        <span class="n">consensus_xz</span> <span class="o">=</span> <span class="n">compress_seq</span><span class="p">(</span><span class="n">consensus</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;UPDATE seqs SET CONSENSUS_XZ=? WHERE ID=?&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">consensus_xz</span><span class="p">,</span> <span class="n">ID</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">commit</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="ViReaDB.get_consensus"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.get_consensus">[docs]</a>    <span class="k">def</span> <span class="nf">get_consensus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Return the consensus sequence for a given entry</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``ID`` (``str``): The unique ID of the entry whose counts to return</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The consensus sequence for ``ID`` (or ``None`` if not yet computed)</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT CONSENSUS_XZ FROM seqs WHERE ID=&#39;</span><span class="si">%s</span><span class="s2">&#39; LIMIT 1&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">tmp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;ID doesn&#39;t exist in database: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">decompress_seq</span><span class="p">(</span><span class="n">tmp</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="ViReaDB.export_fasta"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.export_fasta">[docs]</a>    <span class="k">def</span> <span class="nf">export_fasta</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">out_fn</span><span class="p">,</span> <span class="n">IDs</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Export multiple consensus sequences as a FASTA file</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``out_fn`` (``str``): The path of the output FASTA file</span>
+
+<span class="sd">            ``IDs`` (``list``): List of IDs whose consensus sequences to export</span>
+
+<span class="sd">            ``overwrite`` (``bool``): Overwrite output file if it exists</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">isfile</span><span class="p">(</span><span class="n">out_fn</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">overwrite</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Output file exists: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">out_fn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">IDs</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">IDs</span> <span class="o">=</span> <span class="p">[</span><span class="n">IDs</span><span class="p">]</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">out_fn</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">ID</span> <span class="ow">in</span> <span class="n">IDs</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">seq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_consensus</span><span class="p">(</span><span class="n">ID</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="n">warn</span><span class="p">(</span><span class="s2">&quot;ID doesn&#39;t exist in database and was thus skipped: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">seq</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Consensus sequence hasn&#39;t been computed and was thus skipped: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;&gt;</span><span class="si">%s</span><span class="s2"> (vireadb v</span><span class="si">%s</span><span class="s2">)</span><span class="se">\n</span><span class="si">%s</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">ID</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">version</span><span class="p">,</span> <span class="n">seq</span><span class="p">))</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div></div>
+
+<div class="viewcode-block" id="create_db"><a class="viewcode-back" href="../../index.html#vireadb.create_db">[docs]</a><span class="k">def</span> <span class="nf">create_db</span><span class="p">(</span><span class="n">db_fn</span><span class="p">,</span> <span class="n">ref_fn</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">bufsize</span><span class="o">=</span><span class="n">DEFAULT_BUFSIZE</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Create a new ViReaDB database</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        ``db_fn`` (``str``): The filename of the SQLite3 database file representing this database</span>
+
+<span class="sd">        ``ref_fn`` (``str``): The filename of the viral reference genome to use for this database</span>
+
+<span class="sd">        ``overwrite`` (``bool``): Overwrite ``db_fn`` if it already exists</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        ``ViReaDB`` object</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="c1"># check valid inputs</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">isfile</span><span class="p">(</span><span class="n">ref_fn</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;File not found: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ref_fn</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">isdir</span><span class="p">(</span><span class="n">db_fn</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;db_fn exists as a directory: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">db_fn</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">isfile</span><span class="p">(</span><span class="n">db_fn</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">overwrite</span><span class="p">:</span>
+            <span class="n">remove</span><span class="p">(</span><span class="n">db_fn</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;db_fn exists: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">db_fn</span><span class="p">)</span>
+
+    <span class="c1"># prep for any compression</span>
+    <span class="n">lzma_comp</span> <span class="o">=</span> <span class="n">LZMACompressor</span><span class="p">(</span><span class="n">preset</span><span class="o">=</span><span class="n">PRESET_EXTREME</span><span class="p">)</span>
+
+    <span class="c1"># load reference genome</span>
+    <span class="n">ref_name</span><span class="p">,</span> <span class="n">ref_seq</span> <span class="o">=</span> <span class="n">load_ref</span><span class="p">(</span><span class="n">ref_fn</span><span class="p">)</span>
+    <span class="n">ref_seq_xz</span> <span class="o">=</span> <span class="n">compress_seq</span><span class="p">(</span><span class="n">ref_seq</span><span class="p">)</span>
+
+    <span class="c1"># index reference genome</span>
+    <span class="n">mmi_f</span> <span class="o">=</span> <span class="n">NamedTemporaryFile</span><span class="p">(</span><span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s1">&#39;vireadb&#39;</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s1">&#39;.mmi&#39;</span><span class="p">,</span> <span class="n">buffering</span><span class="o">=</span><span class="n">bufsize</span><span class="p">)</span>
+    <span class="n">mmi_fn</span> <span class="o">=</span> <span class="n">mmi_f</span><span class="o">.</span><span class="n">name</span><span class="p">;</span> <span class="n">mmi_f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="n">call</span><span class="p">(</span><span class="n">BASE_COMMAND_MINIMAP2</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;-d&#39;</span><span class="p">,</span> <span class="n">mmi_fn</span><span class="p">,</span> <span class="n">ref_fn</span><span class="p">],</span> <span class="n">stdout</span><span class="o">=</span><span class="n">DEVNULL</span><span class="p">,</span> <span class="n">stderr</span><span class="o">=</span><span class="n">DEVNULL</span><span class="p">)</span>
+    <span class="n">mmi_f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">mmi_fn</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">);</span> <span class="n">mmi_data</span> <span class="o">=</span> <span class="n">mmi_f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+    <span class="n">mmi_f</span><span class="o">.</span><span class="n">close</span><span class="p">();</span> <span class="n">remove</span><span class="p">(</span><span class="n">mmi_fn</span><span class="p">)</span>
+
+    <span class="c1"># create SQLite3 database and populate with `meta` table</span>
+    <span class="n">con</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">db_fn</span><span class="p">);</span> <span class="n">cur</span> <span class="o">=</span> <span class="n">con</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+    <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;CREATE TABLE meta(</span><span class="si">%s</span><span class="s2">)&quot;</span> <span class="o">%</span> <span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">META_TABLE_COLS</span><span class="p">))</span>
+    <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;INSERT INTO meta VALUES(?, ?)&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s1">&#39;VERSION&#39;</span><span class="p">,</span> <span class="n">VERSION</span><span class="p">))</span>
+    <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;INSERT INTO meta VALUES(?, ?)&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s1">&#39;REF_NAME&#39;</span><span class="p">,</span> <span class="n">ref_name</span><span class="p">))</span>
+    <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;INSERT INTO meta VALUES(?, ?)&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s1">&#39;REF_SEQ_XZ&#39;</span><span class="p">,</span> <span class="n">ref_seq_xz</span><span class="p">))</span>
+    <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;INSERT INTO meta VALUES(?, ?)&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s1">&#39;REF_MMI&#39;</span><span class="p">,</span> <span class="n">mmi_data</span><span class="p">))</span>
+    <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;CREATE TABLE seqs(</span><span class="si">%s</span><span class="s2">)&quot;</span> <span class="o">%</span> <span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">SEQS_TABLE_COLS</span><span class="p">))</span>
+    <span class="n">con</span><span class="o">.</span><span class="n">commit</span><span class="p">();</span> <span class="n">con</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">ViReaDB</span><span class="p">(</span><span class="n">db_fn</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="load_db"><a class="viewcode-back" href="../../index.html#vireadb.load_db">[docs]</a><span class="k">def</span> <span class="nf">load_db</span><span class="p">(</span><span class="n">db_fn</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Load a ViReaDB database from file</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        ``db_fn`` (``str``): The filename of the SQLite3 database file representing this database</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        ``ViReaDB`` object</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">isfile</span><span class="p">(</span><span class="n">db_fn</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;db_fn not found: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">db_fn</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ViReaDB</span><span class="p">(</span><span class="n">db_fn</span><span class="p">)</span></div>
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">vireadb  documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">vireadb.vireadb</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2022, Niema Moshiri.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.4.0.
+    </div>
+  </body>
+</html>

@@ -42,6 +42,197 @@
 <p><a class="reference external" href="https://github.com/niemasd/vireadb">ViReaDB</a> is a user-friendly database for storing reference-compressed viral sequence data and computing consensus genome sequences.</p>
 <section id="module-vireadb">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-vireadb" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="vireadb.ViReaDB">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vireadb.</span></span><span class="sig-name descname"><span class="pre">ViReaDB</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">db_fn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bufsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1048576</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p><code class="docutils literal notranslate"><span class="pre">ViReaDB</span></code> database class</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.add_all_entries">
+<span class="sig-name descname"><span class="pre">add_all_entries</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_meta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_unique</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">commit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.add_all_entries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.add_all_entries" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add all entries from another ViReaDB database into this one</p>
+<dl>
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">other</span></code> (<code class="docutils literal notranslate"><span class="pre">vireadb.ViReaDB</span></code>): The other database from which to add all entries</p>
+<p><code class="docutils literal notranslate"><span class="pre">check_meta</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Check that the metadata are identical across the two databases</p>
+<p><code class="docutils literal notranslate"><span class="pre">check_unique</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Check that every ID is unique (i.e., no IDs in <code class="docutils literal notranslate"><span class="pre">other</span></code> already exist in the calling object)</p>
+<p><code class="docutils literal notranslate"><span class="pre">commit</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Commit database after removing this entry</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.add_entry">
+<span class="sig-name descname"><span class="pre">add_entry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ID</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reads_fn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filetype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_unmapped</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bufsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1048576</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">commit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.add_entry"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.add_entry" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a CRAM/BAM/SAM/FASTQ entry to this database. CRAM inputs are added exactly as-is.</p>
+<dl>
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ID</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The unique ID of the entry to add</p>
+<p><code class="docutils literal notranslate"><span class="pre">reads_fn</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The input reads file. Can provide list of multiple files if FASTQ</p>
+<p><code class="docutils literal notranslate"><span class="pre">filetype</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The format of the input reads file (CRAM, BAM, SAM, or FASTQ), or None to infer from <code class="docutils literal notranslate"><span class="pre">reads_fn</span></code></p>
+<p><code class="docutils literal notranslate"><span class="pre">include_unmapped</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Include unmapped reads when converting from non-CRAM formats</p>
+<p><code class="docutils literal notranslate"><span class="pre">bufsize</span></code> (<code class="docutils literal notranslate"><span class="pre">int</span></code>): Buffer size for reading from file</p>
+<p><code class="docutils literal notranslate"><span class="pre">threads</span></code> (<code class="docutils literal notranslate"><span class="pre">int</span></code>): Number of threads to use for compression</p>
+<p><code class="docutils literal notranslate"><span class="pre">commit</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Commit database after adding this entry</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.clear">
+<span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">commit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.clear"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.clear" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remove all entries from this database</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">commit</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Commit database after removing all entries</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.commit">
+<span class="sig-name descname"><span class="pre">commit</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.commit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.commit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Commit the SQLite3 database</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.compute_consensus">
+<span class="sig-name descname"><span class="pre">compute_consensus</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ID</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_depth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_freq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ambig</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'N'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_gaps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">commit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.compute_consensus"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.compute_consensus" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute the consensus sequence for a given entry. The position and insertion counts must have already been computed</p>
+<dl>
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ID</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The unique ID of the entry whose counts to compute</p>
+<p><code class="docutils literal notranslate"><span class="pre">min_depth</span></code> (<code class="docutils literal notranslate"><span class="pre">int</span></code>): Minimum depth to call base/insertion in consensus</p>
+<p><code class="docutils literal notranslate"><span class="pre">min_freq</span></code> (<code class="docutils literal notranslate"><span class="pre">float</span></code>): Minimum frequency [0,1] to call base/insertion in consensus</p>
+<p><code class="docutils literal notranslate"><span class="pre">ambig</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): Symbol to use for ambiguous bases in consensus</p>
+<p><code class="docutils literal notranslate"><span class="pre">remove_gaps</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Remove gap characters (<code class="docutils literal notranslate"><span class="pre">-</span></code>) from consensus</p>
+<p><code class="docutils literal notranslate"><span class="pre">overwrite</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): <code class="docutils literal notranslate"><span class="pre">True</span></code> to recompute (and overwrite) counts if they already exist</p>
+<p><code class="docutils literal notranslate"><span class="pre">commit</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Commit database after updating this entry</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.compute_counts">
+<span class="sig-name descname"><span class="pre">compute_counts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ID</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_qual</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bufsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1048576</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">commit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.compute_counts"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.compute_counts" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute position and insertion counts for a given entry</p>
+<dl>
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ID</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The unique ID of the entry whose counts to compute</p>
+<p><code class="docutils literal notranslate"><span class="pre">min_qual</span></code> (<code class="docutils literal notranslate"><span class="pre">int</span></code>): Minimum base quality to count base</p>
+<p><code class="docutils literal notranslate"><span class="pre">bufsize</span></code> (<code class="docutils literal notranslate"><span class="pre">int</span></code>): Buffer size for reading from file</p>
+<p><code class="docutils literal notranslate"><span class="pre">overwrite</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): <code class="docutils literal notranslate"><span class="pre">True</span></code> to recompute (and overwrite) counts if they already exist</p>
+<p><code class="docutils literal notranslate"><span class="pre">commit</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Commit database after updating this entry</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.del_entry">
+<span class="sig-name descname"><span class="pre">del_entry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ID</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">commit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.del_entry"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.del_entry" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remove an entry to this database</p>
+<dl>
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ID</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The unique ID of the entry to remove</p>
+<p><code class="docutils literal notranslate"><span class="pre">commit</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Commit database after removing this entry</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.export_fasta">
+<span class="sig-name descname"><span class="pre">export_fasta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">out_fn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">IDs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.export_fasta"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.export_fasta" title="Permalink to this definition">¶</a></dt>
+<dd><p>Export multiple consensus sequences as a FASTA file</p>
+<dl>
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">out_fn</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The path of the output FASTA file</p>
+<p><code class="docutils literal notranslate"><span class="pre">IDs</span></code> (<code class="docutils literal notranslate"><span class="pre">list</span></code>): List of IDs whose consensus sequences to export</p>
+<p><code class="docutils literal notranslate"><span class="pre">overwrite</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Overwrite output file if it exists</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.get_IDs">
+<span class="sig-name descname"><span class="pre">get_IDs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.get_IDs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.get_IDs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the IDs in this database</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">list</span></code> object containing all of the IDs in this database</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.get_consensus">
+<span class="sig-name descname"><span class="pre">get_consensus</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ID</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.get_consensus"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.get_consensus" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the consensus sequence for a given entry</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ID</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The unique ID of the entry whose counts to return</p>
+</dd>
+<dt>Returns:</dt><dd><p>The consensus sequence for <code class="docutils literal notranslate"><span class="pre">ID</span></code> (or <code class="docutils literal notranslate"><span class="pre">None</span></code> if not yet computed)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.get_counts">
+<span class="sig-name descname"><span class="pre">get_counts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ID</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.get_counts"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.get_counts" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the position and insertion counts for a given entry</p>
+<dl>
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ID</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The unique ID of the entry whose counts to return</p>
+</dd>
+<dt>Returns:</dt><dd><p>The position counts for <code class="docutils literal notranslate"><span class="pre">ID</span></code> (or <code class="docutils literal notranslate"><span class="pre">None</span></code> if not yet computed)</p>
+<p>The insertion counts for <code class="docutils literal notranslate"><span class="pre">ID</span></code> (or <code class="docutils literal notranslate"><span class="pre">None</span></code> if not yet computed)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.get_entry">
+<span class="sig-name descname"><span class="pre">get_entry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ID</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.get_entry"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.get_entry" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the data of an entry associated with a given ID in this database</p>
+<dl>
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ID</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The unique ID of the entry to retrieve</p>
+</dd>
+<dt>Returns:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">bytes</span></code> object containing the CRAM data of the reads</p>
+<p><code class="docutils literal notranslate"><span class="pre">numpy.array</span></code> object containing the position counts</p>
+<p><code class="docutils literal notranslate"><span class="pre">dict</span></code> object containing the insertion counts</p>
+<p><code class="docutils literal notranslate"><span class="pre">str</span></code> object containing the consensus sequence</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vireadb.ViReaDB.get_meta">
+<span class="sig-name descname"><span class="pre">get_meta</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#ViReaDB.get_meta"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.ViReaDB.get_meta" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the metadata from this <code class="docutils literal notranslate"><span class="pre">ViReaDB</span></code> database</p>
+<dl class="simple">
+<dt>Returns:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">dict</span></code> object containing the metadata of this <code class="docutils literal notranslate"><span class="pre">ViReaDB</span></code> database</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="vireadb.create_db">
+<span class="sig-prename descclassname"><span class="pre">vireadb.</span></span><span class="sig-name descname"><span class="pre">create_db</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">db_fn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ref_fn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bufsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1048576</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#create_db"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.create_db" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a new ViReaDB database</p>
+<dl>
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">db_fn</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The filename of the SQLite3 database file representing this database</p>
+<p><code class="docutils literal notranslate"><span class="pre">ref_fn</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The filename of the viral reference genome to use for this database</p>
+<p><code class="docutils literal notranslate"><span class="pre">overwrite</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Overwrite <code class="docutils literal notranslate"><span class="pre">db_fn</span></code> if it already exists</p>
+</dd>
+<dt>Returns:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ViReaDB</span></code> object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="vireadb.load_db">
+<span class="sig-prename descclassname"><span class="pre">vireadb.</span></span><span class="sig-name descname"><span class="pre">load_db</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">db_fn</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#load_db"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.load_db" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load a ViReaDB database from file</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">db_fn</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The filename of the SQLite3 database file representing this database</p>
+</dd>
+<dt>Returns:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ViReaDB</span></code> object</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 </section>
 
