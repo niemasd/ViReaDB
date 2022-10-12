@@ -27,4 +27,4 @@ RUN apk update && \
     rm -rf minimap2-* &&\
 
     # install vireadb
-    pip3 install --no-cache-dir --update vireadb
+    pip3 install --no-cache-dir --upgrade vireadb
