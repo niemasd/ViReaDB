@@ -54,15 +54,15 @@ class ViReaDB:
         '''
         self.con = sqlite3.connect(db_fn)
         self.cur = self.con.cursor()
-        self.version = self.cur.execute("SELECT val FROM meta WHERE key='VERSION'").fetchone()[0]
-        self.ref_name = self.cur.execute("SELECT val FROM meta WHERE key='REF_NAME'").fetchone()[0]
-        ref_seq_xz = self.cur.execute("SELECT val FROM meta WHERE key='REF_SEQ_XZ'").fetchone()[0]
+        self.version = self.cur.execute("SELECT val FROM meta WHERE key='VERSION' LIMIT 1").fetchone()[0]
+        self.ref_name = self.cur.execute("SELECT val FROM meta WHERE key='REF_NAME' LIMIT 1").fetchone()[0]
+        ref_seq_xz = self.cur.execute("SELECT val FROM meta WHERE key='REF_SEQ_XZ' LIMIT 1").fetchone()[0]
         self.ref_seq = decompress_seq(ref_seq_xz)
         self.ref_len = len(self.ref_seq)
         self.ref_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.fas', buffering=bufsize)
         self.ref_f.write('%s\n%s\n' % (self.ref_name, self.ref_seq)); self.ref_f.flush()
         self.mmi_f = NamedTemporaryFile('wb', prefix='vireadb', suffix='.mmi', buffering=bufsize)
-        self.mmi_f.write(self.cur.execute("SELECT val FROM meta WHERE key='REF_MMI'").fetchone()[0]); self.mmi_f.flush()
+        self.mmi_f.write(self.cur.execute("SELECT val FROM meta WHERE key='REF_MMI' LIMIT 1").fetchone()[0]); self.mmi_f.flush()
 
     def __del__(self):
         '''``ViReaDB`` destructor'''
@@ -118,7 +118,7 @@ class ViReaDB:
             ``commit`` (``bool``): Commit database after adding this entry
         '''
         # check for validity
-        if self.cur.execute("SELECT ID FROM seqs WHERE ID='%s'" % ID).fetchone() is not None:
+        if ID in self:
             raise ValueError("ID already exists in database: %s" % ID)
         if isinstance(reads_fn, list):
             if len(reads_fn) == 0:
@@ -186,7 +186,7 @@ class ViReaDB:
 
             ``commit`` (``bool``): Commit database after removing this entry
         '''
-        if self.cur.execute("SELECT ID FROM seqs WHERE ID='%s'" % ID).fetchone() is None:
+        if ID not in self:
             raise KeyError("ID doesn't exist in database: %s" % ID)
         self.cur.execute("DELETE FROM seqs WHERE ID='%s'" % ID)
         if commit:
@@ -207,8 +207,7 @@ class ViReaDB:
             
             ``str`` object containing the consensus sequence
         '''
-        pass # 'CRAM', 'POS_COUNTS_XZ', 'INS_COUNTS_XZ', 'CONSENSUS_XZ
-        tmp = self.cur.execute("SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
+        tmp = self.cur.execute("SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID='%s' LIMIT 1" % ID).fetchone()
         if tmp is None:
             raise KeyError("ID doesn't exist in database: %s" % ID)
         cram, pos_counts_xz, ins_counts_xz, consensus_xz = tmp
@@ -229,7 +228,7 @@ class ViReaDB:
             ``commit`` (``bool``): Commit database after updating this entry
         '''
         # check for validity
-        tmp = self.cur.execute("SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
+        tmp = self.cur.execute("SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ FROM seqs WHERE ID='%s' LIMIT 1" % ID).fetchone()
         if tmp is None:
             raise KeyError("ID doesn't exist in database: %s" % ID)
         cram_data, pos_counts_xz, ins_counts_xz = tmp
@@ -261,7 +260,7 @@ class ViReaDB:
 
             The insertion counts for ``ID`` (or ``None`` if not yet computed)
         '''
-        tmp = self.cur.execute("SELECT POS_COUNTS_XZ, INS_COUNTS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
+        tmp = self.cur.execute("SELECT POS_COUNTS_XZ, INS_COUNTS_XZ FROM seqs WHERE ID='%s' LIMIT 1" % ID).fetchone()
         if tmp is None:
             raise KeyError("ID doesn't exist in database: %s" % ID)
         pos_counts_xz, ins_counts_xz = tmp
@@ -288,7 +287,7 @@ class ViReaDB:
             ``commit`` (``bool``): Commit database after updating this entry
         '''
         # check for validity
-        tmp = self.cur.execute("SELECT POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
+        tmp = self.cur.execute("SELECT POS_COUNTS_XZ, INS_COUNTS_XZ, CONSENSUS_XZ FROM seqs WHERE ID='%s' LIMIT 1" % ID).fetchone()
         if tmp is None:
             raise KeyError("ID doesn't exist in database: %s" % ID)
         pos_counts_xz, ins_counts_xz, consensus_xz = tmp
@@ -315,7 +314,7 @@ class ViReaDB:
         Returns:
             The consensus sequence for ``ID`` (or ``None`` if not yet computed)
         '''
-        tmp = self.cur.execute("SELECT CONSENSUS_XZ FROM seqs WHERE ID='%s'" % ID).fetchone()
+        tmp = self.cur.execute("SELECT CONSENSUS_XZ FROM seqs WHERE ID='%s' LIMIT 1" % ID).fetchone()
         if tmp is None:
             raise KeyError("ID doesn't exist in database: %s" % ID)
         return decompress_seq(tmp[0])
