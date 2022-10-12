@@ -52,6 +52,7 @@
 <span class="kn">from</span> <span class="nn">lzma</span> <span class="kn">import</span> <span class="n">LZMACompressor</span><span class="p">,</span> <span class="n">LZMADecompressor</span><span class="p">,</span> <span class="n">PRESET_EXTREME</span> <span class="c1"># TODO DELETE</span>
 <span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">remove</span>
 <span class="kn">from</span> <span class="nn">os.path</span> <span class="kn">import</span> <span class="n">isdir</span><span class="p">,</span> <span class="n">isfile</span>
+<span class="kn">from</span> <span class="nn">shutil</span> <span class="kn">import</span> <span class="n">copyfile</span>
 <span class="kn">from</span> <span class="nn">subprocess</span> <span class="kn">import</span> <span class="n">call</span><span class="p">,</span> <span class="n">check_output</span><span class="p">,</span> <span class="n">DEVNULL</span><span class="p">,</span> <span class="n">PIPE</span><span class="p">,</span> <span class="n">Popen</span>
 <span class="kn">from</span> <span class="nn">sys</span> <span class="kn">import</span> <span class="n">argv</span>
 <span class="kn">from</span> <span class="nn">tempfile</span> <span class="kn">import</span> <span class="n">NamedTemporaryFile</span>
@@ -237,7 +238,7 @@
 <span class="sd">        Args:</span>
 <span class="sd">            ``other`` (``vireadb.ViReaDB``): The other database from which to add all entries</span>
 
-<span class="sd">            ``check_meta`` (``bool``): Check that the metadata are identical across the two databases</span>
+<span class="sd">            ``check_meta`` (``bool``): Check that the metadata are identical across the two databases. Should only be skipped if user is already guaranteed that they match</span>
 
 <span class="sd">            ``check_unique`` (``bool``): Check that every ID is unique (i.e., no IDs in ``other`` already exist in the calling object). Should only be skipped if user is already guaranteed to not have duplicates</span>
 
@@ -448,6 +449,8 @@
 
 <span class="sd">        ``overwrite`` (``bool``): Overwrite ``db_fn`` if it already exists</span>
 
+<span class="sd">        ``bufsize`` (``int``): Buffer size for reading from file</span>
+
 <span class="sd">    Returns:</span>
 <span class="sd">        ``ViReaDB`` object</span>
 <span class="sd">    &#39;&#39;&#39;</span>
@@ -499,6 +502,44 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="n">isfile</span><span class="p">(</span><span class="n">db_fn</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;db_fn not found: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">db_fn</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">ViReaDB</span><span class="p">(</span><span class="n">db_fn</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="merge_dbs"><a class="viewcode-back" href="../../index.html#vireadb.merge_dbs">[docs]</a><span class="k">def</span> <span class="nf">merge_dbs</span><span class="p">(</span><span class="n">out_db_fn</span><span class="p">,</span> <span class="n">in_db_fns</span><span class="p">,</span> <span class="n">check_meta</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">bufsize</span><span class="o">=</span><span class="n">DEFAULT_BUFSIZE</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Merge multiple ViReaDB databases</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        ``out_db_fn`` (``str``): The filename of the SQLite3 database file representing the output database</span>
+
+<span class="sd">        ``in_db_fns`` (``list``): The filenames of the SQLite3 databases representing the input databases</span>
+
+<span class="sd">        ``check_meta`` (``bool``): Check that the metadata are identical across the databases. Should only be skipped if user is already guaranteed that they match</span>
+
+<span class="sd">        ``overwrite`` (``bool``): Overwrite ``db_fn`` if it already exists</span>
+
+<span class="sd">        ``bufsize`` (``int``): Buffer size for reading from file</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        ``ViReaDB`` object</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="c1"># validity check</span>
+    <span class="k">for</span> <span class="n">in_db_fn</span> <span class="ow">in</span> <span class="n">in_db_fns</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">isfile</span><span class="p">(</span><span class="n">in_db_fn</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Input database file not found: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">in_db_fn</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">isfile</span><span class="p">(</span><span class="n">out_db_fn</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">overwrite</span><span class="p">:</span>
+            <span class="n">remove</span><span class="p">(</span><span class="n">out_db_fn</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;out_db_fn exists: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">out_db_fn</span><span class="p">)</span>
+
+    <span class="c1"># merge databases</span>
+    <span class="n">copyfile</span><span class="p">(</span><span class="n">in_db_fns</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">out_db_fn</span><span class="p">)</span>
+    <span class="n">out_db</span> <span class="o">=</span> <span class="n">load_db</span><span class="p">(</span><span class="n">out_db_fn</span><span class="p">);</span> <span class="n">out_db_meta</span> <span class="o">=</span> <span class="n">out_db</span><span class="o">.</span><span class="n">get_meta</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">in_db_fn</span> <span class="ow">in</span> <span class="n">in_db_fns</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+        <span class="n">curr_db</span> <span class="o">=</span> <span class="n">load_db</span><span class="p">(</span><span class="n">in_db_fn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">check_meta</span> <span class="ow">and</span> <span class="n">out_db_meta</span> <span class="o">!=</span> <span class="n">curr_db</span><span class="o">.</span><span class="n">get_meta</span><span class="p">():</span>
+            <span class="k">del</span> <span class="n">out_db</span><span class="p">;</span> <span class="n">remove</span><span class="p">(</span><span class="n">out_db_fn</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Metadata of the databases do not match&quot;</span><span class="p">)</span>
+        <span class="n">out_db</span><span class="o">.</span><span class="n">add_all_entries</span><span class="p">(</span><span class="n">curr_db</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">out_db</span></div>
 </pre></div>
 
             <div class="clearer"></div>

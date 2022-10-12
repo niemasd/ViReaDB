@@ -53,7 +53,7 @@
 <dd><p>Add all entries from another ViReaDB database into this one</p>
 <dl>
 <dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">other</span></code> (<code class="docutils literal notranslate"><span class="pre">vireadb.ViReaDB</span></code>): The other database from which to add all entries</p>
-<p><code class="docutils literal notranslate"><span class="pre">check_meta</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Check that the metadata are identical across the two databases</p>
+<p><code class="docutils literal notranslate"><span class="pre">check_meta</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Check that the metadata are identical across the two databases. Should only be skipped if user is already guaranteed that they match</p>
 <p><code class="docutils literal notranslate"><span class="pre">check_unique</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Check that every ID is unique (i.e., no IDs in <code class="docutils literal notranslate"><span class="pre">other</span></code> already exist in the calling object). Should only be skipped if user is already guaranteed to not have duplicates</p>
 <p><code class="docutils literal notranslate"><span class="pre">commit</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Commit database after removing this entry</p>
 </dd>
@@ -216,6 +216,7 @@
 <dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">db_fn</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The filename of the SQLite3 database file representing this database</p>
 <p><code class="docutils literal notranslate"><span class="pre">ref_fn</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The filename of the viral reference genome to use for this database</p>
 <p><code class="docutils literal notranslate"><span class="pre">overwrite</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Overwrite <code class="docutils literal notranslate"><span class="pre">db_fn</span></code> if it already exists</p>
+<p><code class="docutils literal notranslate"><span class="pre">bufsize</span></code> (<code class="docutils literal notranslate"><span class="pre">int</span></code>): Buffer size for reading from file</p>
 </dd>
 <dt>Returns:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ViReaDB</span></code> object</p>
 </dd>
@@ -228,6 +229,22 @@
 <dd><p>Load a ViReaDB database from file</p>
 <dl class="simple">
 <dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">db_fn</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The filename of the SQLite3 database file representing this database</p>
+</dd>
+<dt>Returns:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ViReaDB</span></code> object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="vireadb.merge_dbs">
+<span class="sig-prename descclassname"><span class="pre">vireadb.</span></span><span class="sig-name descname"><span class="pre">merge_dbs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">out_db_fn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_db_fns</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_meta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bufsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1048576</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/vireadb/vireadb.html#merge_dbs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#vireadb.merge_dbs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Merge multiple ViReaDB databases</p>
+<dl>
+<dt>Args:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">out_db_fn</span></code> (<code class="docutils literal notranslate"><span class="pre">str</span></code>): The filename of the SQLite3 database file representing the output database</p>
+<p><code class="docutils literal notranslate"><span class="pre">in_db_fns</span></code> (<code class="docutils literal notranslate"><span class="pre">list</span></code>): The filenames of the SQLite3 databases representing the input databases</p>
+<p><code class="docutils literal notranslate"><span class="pre">check_meta</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Check that the metadata are identical across the databases. Should only be skipped if user is already guaranteed that they match</p>
+<p><code class="docutils literal notranslate"><span class="pre">overwrite</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>): Overwrite <code class="docutils literal notranslate"><span class="pre">db_fn</span></code> if it already exists</p>
+<p><code class="docutils literal notranslate"><span class="pre">bufsize</span></code> (<code class="docutils literal notranslate"><span class="pre">int</span></code>): Buffer size for reading from file</p>
 </dd>
 <dt>Returns:</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ViReaDB</span></code> object</p>
 </dd>
