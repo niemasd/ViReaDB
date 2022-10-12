@@ -95,6 +95,9 @@ class ViReaDB:
         '''
         return self.cur.execute("SELECT COUNT(*) FROM seqs WHERE ID='%s' LIMIT 1" % ID).fetchone()[0] != 0
 
+    def __iter__(self):
+        return iter(self.cur.execute("SELECT * FROM seqs").fetchall())
+
     def commit(self):
         '''Commit the SQLite3 database'''
         self.con.commit()
@@ -202,7 +205,7 @@ class ViReaDB:
             raise TypeError("Other database must be ViReaDB object, but it was: %s" % str(type(other)))
         if check_meta and self.get_meta() != other.get_meta():
             raise TypeError("Metadata of the databases do not match")
-        for curr_row in other.cur.execute("SELECT * FROM seqs").fetchall():
+        for curr_row in other:
             if check_unique and curr_row[0] in self:
                 warn("Duplicate ID not added: %s" % curr_row[0])
             else:
@@ -244,6 +247,14 @@ class ViReaDB:
             raise KeyError("ID doesn't exist in database: %s" % ID)
         cram, pos_counts_xz, ins_counts_xz, consensus_xz = tmp
         return cram, decompress_pos_counts(pos_counts_xz), decompress_ins_counts(ins_counts_xz), decompress_seq(consensus_xz)
+
+    def get_IDs(self):
+        '''Return the IDs in this database
+
+        Returns:
+            ``list`` object containing all of the IDs in this database
+        '''
+        return [row[0] for row in self.cur.execute("SELECT ID FROM seqs").fetchall()]
 
     def compute_counts(self, ID, min_qual=DEFAULT_MIN_QUAL, bufsize=DEFAULT_BUFSIZE, overwrite=False, commit=True):
         '''Compute position and insertion counts for a given entry
