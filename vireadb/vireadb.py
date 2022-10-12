@@ -110,7 +110,7 @@ class ViReaDB:
         '''
         return {'VERSION':self.version, 'REF_NAME':self.ref_name, 'REF_SEQ': self.ref_seq}
 
-    def add_entry(self, ID, reads_fn, filetype=None, include_unmapped=False, bufsize=DEFAULT_BUFSIZE, threads=DEFAULT_THREADS, commit=True):
+    def add_entry(self, ID, reads_fn, filetype=None, include_unmapped=False, check_unique=True, bufsize=DEFAULT_BUFSIZE, threads=DEFAULT_THREADS, commit=True):
         '''Add a CRAM/BAM/SAM/FASTQ entry to this database. CRAM inputs are added exactly as-is.
 
         Args:
@@ -122,6 +122,8 @@ class ViReaDB:
 
             ``include_unmapped`` (``bool``): Include unmapped reads when converting from non-CRAM formats
 
+            ``check_unique`` (``bool``): Check that ``ID`` doesn't already exist. Should only be skipped if user is already guaranteed to not have duplicates
+
             ``bufsize`` (``int``): Buffer size for reading from file
             
             ``threads`` (``int``): Number of threads to use for compression
@@ -129,7 +131,7 @@ class ViReaDB:
             ``commit`` (``bool``): Commit database after adding this entry
         '''
         # check for validity
-        if ID in self:
+        if check_unique and ID in self:
             raise ValueError("ID already exists in database: %s" % ID)
         if isinstance(reads_fn, list):
             if len(reads_fn) == 0:
@@ -197,7 +199,7 @@ class ViReaDB:
 
             ``check_meta`` (``bool``): Check that the metadata are identical across the two databases
 
-            ``check_unique`` (``bool``): Check that every ID is unique (i.e., no IDs in ``other`` already exist in the calling object)
+            ``check_unique`` (``bool``): Check that every ID is unique (i.e., no IDs in ``other`` already exist in the calling object). Should only be skipped if user is already guaranteed to not have duplicates
 
             ``commit`` (``bool``): Commit database after removing this entry
         '''
@@ -221,8 +223,6 @@ class ViReaDB:
 
             ``commit`` (``bool``): Commit database after removing this entry
         '''
-        if ID not in self:
-            raise KeyError("ID doesn't exist in database: %s" % ID)
         self.cur.execute("DELETE FROM seqs WHERE ID='%s'" % ID)
         if commit:
             self.commit()

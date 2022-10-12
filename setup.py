@@ -10,10 +10,13 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
+# load version from source code
+from vireadb import VERSION
+
 here = path.abspath(path.dirname(__file__))
 setup(
     name='vireadb',  # Required
-    version='0.0.2',  # Required
+    version=VERSION,  # Required
     description='vireadb: Viral Read Database',  # Required
     long_description='ViReaDB is a user-friendly database for storing reference-compressed viral sequence data and computing consensus genome sequences.',  # Optional
     long_description_content_type='text/plain',  # Optional (see note above)
