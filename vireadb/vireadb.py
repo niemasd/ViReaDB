@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 '''
-vireadb: Viral Read Database
+ViReaDB: Viral Read Database
 '''
 
 # imports

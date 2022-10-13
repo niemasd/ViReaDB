@@ -15,12 +15,12 @@ from vireadb import VERSION
 
 here = path.abspath(path.dirname(__file__))
 setup(
-    name='vireadb',  # Required
+    name='ViReaDB',  # Required
     version=VERSION,  # Required
-    description='vireadb: Viral Read Database',  # Required
+    description='ViReaDB: Viral Read Database',  # Required
     long_description='ViReaDB is a user-friendly database for storing reference-compressed viral sequence data and computing consensus genome sequences.',  # Optional
     long_description_content_type='text/plain',  # Optional (see note above)
-    url='https://github.com/niemasd/vireadb',  # Optional
+    url='https://github.com/niemasd/ViReaDB',  # Optional
     author='Niema Moshiri',  # Optional
     author_email='niemamoshiri@gmail.com',  # Optional
     classifiers=[  # Optional
@@ -50,7 +50,7 @@ setup(
         'dev': ['check-manifest'],
     },
     project_urls={  # Optional
-        'Bug Reports': 'https://github.com/niemasd/vireadb/issues',
-        'Source': 'https://github.com/niemasd/vireadb',
+        'Bug Reports': 'https://github.com/niemasd/ViReaDB/issues',
+        'Source': 'https://github.com/niemasd/ViReaDB',
     },
 )

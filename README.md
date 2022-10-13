@@ -1,4 +1,4 @@
-# vireadb
+# ViReaDB
 ViReaDB is a user-friendly database for storing reference-compressed viral sequence data and computing consensus genome sequences.
 
 ## Installation
@@ -31,9 +31,9 @@ db = vireadb.load_db("example.db")
 seq = db.get_consensus("my_sample")
 ```
 
-Full documentation can be found at [https://niemasd.github.io/vireadb/](https://niemasd.github.io/vireadb/), and more examples can be found in the [ViReaDB Wiki](https://github.com/niemasd/vireadb/wiki).
+Full documentation can be found at [https://niemasd.github.io/ViReaDB/](https://niemasd.github.io/ViReaDB/), and more examples can be found in the [ViReaDB Wiki](https://github.com/niemasd/ViReaDB/wiki).
 
 ## Citing ViReaDB
 If you use ViReaDB in your work, please cite this GitHub repository (a manuscript is in preparation):
 
-> https://github.com/niemasd/vireadb
+> https://github.com/niemasd/ViReaDB
