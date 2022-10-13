@@ -15,7 +15,7 @@ from vireadb import VERSION
 
 here = path.abspath(path.dirname(__file__))
 setup(
-    name='ViReaDB',  # Required
+    name='vireadb',  # Required
     version=VERSION,  # Required
     description='ViReaDB: Viral Read Database',  # Required
     long_description='ViReaDB is a user-friendly database for storing reference-compressed viral sequence data and computing consensus genome sequences.',  # Optional
