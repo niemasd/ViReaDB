@@ -8,8 +8,6 @@ from .common import *
 from .compress import *
 from .cram import *
 from .fasta import *
-from io import BytesIO # TODO DELETE
-from lzma import LZMACompressor, LZMADecompressor, PRESET_EXTREME # TODO DELETE
 from os import remove
 from os.path import isdir, isfile
 from shutil import copyfile
@@ -228,6 +226,26 @@ class ViReaDB:
         if commit:
             self.commit()
 
+    def rename_entry(self, old_ID, new_ID, commit=True):
+        '''Rename an entry in this database
+
+        Args:
+            ``old_ID`` (``str``): The original ID of the entry to rename
+
+            ``new_ID`` (``str``): The new ID to rename the entry
+
+            ``commit`` (``bool``): Commit database after renaming this entry
+        '''
+        if new_ID in self:
+            raise ValueError("ID already exists in database: %s" % new_ID)
+        self.cur.execute("UPDATE seqs SET ID=? WHERE ID=?", (new_ID, old_ID))
+        consensus = self.get_consensus(new_ID)
+        if consensus is not None:
+            consensus_xz = compress_str(">%s%s" % (new_ID, consensus.lstrip(">%s" % old_ID)))
+            self.cur.execute("UPDATE seqs SET CONSENSUS_XZ=? WHERE ID=?", (consensus_xz, new_ID))
+        if commit:
+            self.commit()
+
     def clear(self, commit=True):
         '''Remove all entries from this database
 
@@ -414,7 +432,7 @@ class ViReaDB:
             if seq is None:
                 warn("Consensus sequence hasn't been computed and was thus skipped: %s" % ID)
             else:
-                f.write(">%s (vireadb v%s)\n%s\n" % (ID, self.version, seq))
+                f.write(seq)
         f.close()
 
 def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
@@ -442,9 +460,6 @@ def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
             remove(db_fn)
         else:
             raise ValueError("db_fn exists: %s" % db_fn)
-
-    # prep for any compression
-    lzma_comp = LZMACompressor(preset=PRESET_EXTREME)
 
     # load reference genome
     ref_name, ref_seq = load_ref(ref_fn)

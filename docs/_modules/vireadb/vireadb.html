@@ -48,8 +48,6 @@
 <span class="kn">from</span> <span class="nn">.compress</span> <span class="kn">import</span> <span class="o">*</span>
 <span class="kn">from</span> <span class="nn">.cram</span> <span class="kn">import</span> <span class="o">*</span>
 <span class="kn">from</span> <span class="nn">.fasta</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BytesIO</span> <span class="c1"># TODO DELETE</span>
-<span class="kn">from</span> <span class="nn">lzma</span> <span class="kn">import</span> <span class="n">LZMACompressor</span><span class="p">,</span> <span class="n">LZMADecompressor</span><span class="p">,</span> <span class="n">PRESET_EXTREME</span> <span class="c1"># TODO DELETE</span>
 <span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">remove</span>
 <span class="kn">from</span> <span class="nn">os.path</span> <span class="kn">import</span> <span class="n">isdir</span><span class="p">,</span> <span class="n">isfile</span>
 <span class="kn">from</span> <span class="nn">shutil</span> <span class="kn">import</span> <span class="n">copyfile</span>
@@ -268,6 +266,26 @@
         <span class="k">if</span> <span class="n">commit</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
 
+<div class="viewcode-block" id="ViReaDB.rename_entry"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.rename_entry">[docs]</a>    <span class="k">def</span> <span class="nf">rename_entry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">old_ID</span><span class="p">,</span> <span class="n">new_ID</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Rename an entry in this database</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``old_ID`` (``str``): The original ID of the entry to rename</span>
+
+<span class="sd">            ``new_ID`` (``str``): The new ID to rename the entry</span>
+
+<span class="sd">            ``commit`` (``bool``): Commit database after renaming this entry</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">new_ID</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;ID already exists in database: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">new_ID</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;UPDATE seqs SET ID=? WHERE ID=?&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">new_ID</span><span class="p">,</span> <span class="n">old_ID</span><span class="p">))</span>
+        <span class="n">consensus</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_consensus</span><span class="p">(</span><span class="n">new_ID</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">consensus</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">consensus_xz</span> <span class="o">=</span> <span class="n">compress_str</span><span class="p">(</span><span class="s2">&quot;&gt;</span><span class="si">%s%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">new_ID</span><span class="p">,</span> <span class="n">consensus</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">&quot;&gt;</span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">old_ID</span><span class="p">)))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;UPDATE seqs SET CONSENSUS_XZ=? WHERE ID=?&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">consensus_xz</span><span class="p">,</span> <span class="n">new_ID</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">commit</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+
 <div class="viewcode-block" id="ViReaDB.clear"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.clear">[docs]</a>    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Remove all entries from this database</span>
 
@@ -454,7 +472,7 @@
             <span class="k">if</span> <span class="n">seq</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Consensus sequence hasn&#39;t been computed and was thus skipped: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;&gt;</span><span class="si">%s</span><span class="s2"> (vireadb v</span><span class="si">%s</span><span class="s2">)</span><span class="se">\n</span><span class="si">%s</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">ID</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">version</span><span class="p">,</span> <span class="n">seq</span><span class="p">))</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
         <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div></div>
 
 <div class="viewcode-block" id="create_db"><a class="viewcode-back" href="../../index.html#vireadb.create_db">[docs]</a><span class="k">def</span> <span class="nf">create_db</span><span class="p">(</span><span class="n">db_fn</span><span class="p">,</span> <span class="n">ref_fn</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">bufsize</span><span class="o">=</span><span class="n">DEFAULT_BUFSIZE</span><span class="p">):</span>
@@ -482,9 +500,6 @@
             <span class="n">remove</span><span class="p">(</span><span class="n">db_fn</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;db_fn exists: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">db_fn</span><span class="p">)</span>
-
-    <span class="c1"># prep for any compression</span>
-    <span class="n">lzma_comp</span> <span class="o">=</span> <span class="n">LZMACompressor</span><span class="p">(</span><span class="n">preset</span><span class="o">=</span><span class="n">PRESET_EXTREME</span><span class="p">)</span>
 
     <span class="c1"># load reference genome</span>
     <span class="n">ref_name</span><span class="p">,</span> <span class="n">ref_seq</span> <span class="o">=</span> <span class="n">load_ref</span><span class="p">(</span><span class="n">ref_fn</span><span class="p">)</span>
