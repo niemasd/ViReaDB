@@ -413,6 +413,23 @@
             <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;ID doesn&#39;t exist in database: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">decompress_seq</span><span class="p">(</span><span class="n">tmp</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span></div>
 
+<div class="viewcode-block" id="ViReaDB.export_cram"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.export_cram">[docs]</a>    <span class="k">def</span> <span class="nf">export_cram</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">,</span> <span class="n">out_fn</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Export the CRAM file of a given entry</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``ID`` (``str``): The unique ID of the entry whose CRAM to export</span>
+
+<span class="sd">            ``out_fn`` (``str``): The path of the output CRAM file</span>
+
+<span class="sd">            ``overwrite`` (``bool``): Overwrite output file if it exists</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">isfile</span><span class="p">(</span><span class="n">out_fn</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">overwrite</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Output file exists: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">out_fn</span><span class="p">)</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT CRAM FROM seqs WHERE ID=&#39;</span><span class="si">%s</span><span class="s2">&#39; LIMIT 1&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">tmp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;ID doesn&#39;t exist in database: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">out_fn</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">);</span> <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">tmp</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span> <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
 <div class="viewcode-block" id="ViReaDB.export_fasta"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.export_fasta">[docs]</a>    <span class="k">def</span> <span class="nf">export_fasta</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">out_fn</span><span class="p">,</span> <span class="n">IDs</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Export multiple consensus sequences as a FASTA file</span>
 
@@ -503,7 +520,7 @@
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;db_fn not found: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">db_fn</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">ViReaDB</span><span class="p">(</span><span class="n">db_fn</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="merge_dbs"><a class="viewcode-back" href="../../index.html#vireadb.merge_dbs">[docs]</a><span class="k">def</span> <span class="nf">merge_dbs</span><span class="p">(</span><span class="n">out_db_fn</span><span class="p">,</span> <span class="n">in_db_fns</span><span class="p">,</span> <span class="n">check_meta</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">bufsize</span><span class="o">=</span><span class="n">DEFAULT_BUFSIZE</span><span class="p">):</span>
+<div class="viewcode-block" id="merge_dbs"><a class="viewcode-back" href="../../index.html#vireadb.merge_dbs">[docs]</a><span class="k">def</span> <span class="nf">merge_dbs</span><span class="p">(</span><span class="n">out_db_fn</span><span class="p">,</span> <span class="n">in_db_fns</span><span class="p">,</span> <span class="n">check_meta</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Merge multiple ViReaDB databases</span>
 
 <span class="sd">    Args:</span>
@@ -514,8 +531,6 @@
 <span class="sd">        ``check_meta`` (``bool``): Check that the metadata are identical across the databases. Should only be skipped if user is already guaranteed that they match</span>
 
 <span class="sd">        ``overwrite`` (``bool``): Overwrite ``db_fn`` if it already exists</span>
-
-<span class="sd">        ``bufsize`` (``int``): Buffer size for reading from file</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        ``ViReaDB`` object</span>
