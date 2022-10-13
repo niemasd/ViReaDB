@@ -373,6 +373,23 @@ class ViReaDB:
             raise KeyError("ID doesn't exist in database: %s" % ID)
         return decompress_seq(tmp[0])
 
+    def export_cram(self, ID, out_fn, overwrite=False):
+        '''Export the CRAM file of a given entry
+
+        Args:
+            ``ID`` (``str``): The unique ID of the entry whose CRAM to export
+
+            ``out_fn`` (``str``): The path of the output CRAM file
+
+            ``overwrite`` (``bool``): Overwrite output file if it exists
+        '''
+        if isfile(out_fn) and not overwrite:
+            raise ValueError("Output file exists: %s" % out_fn)
+        tmp = self.cur.execute("SELECT CRAM FROM seqs WHERE ID='%s' LIMIT 1" % ID).fetchone()
+        if tmp is None:
+            raise KeyError("ID doesn't exist in database: %s" % ID)
+        f = open(out_fn, 'wb'); f.write(tmp[0]); f.close()
+
     def export_fasta(self, out_fn, IDs, overwrite=False):
         '''Export multiple consensus sequences as a FASTA file
 
