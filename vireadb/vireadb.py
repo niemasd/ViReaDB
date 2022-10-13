@@ -58,7 +58,7 @@ class ViReaDB:
         self.version = self.cur.execute("SELECT val FROM meta WHERE key='VERSION' LIMIT 1").fetchone()[0]
         self.ref_name = self.cur.execute("SELECT val FROM meta WHERE key='REF_NAME' LIMIT 1").fetchone()[0]
         ref_seq_xz = self.cur.execute("SELECT val FROM meta WHERE key='REF_SEQ_XZ' LIMIT 1").fetchone()[0]
-        self.ref_seq = decompress_seq(ref_seq_xz)
+        self.ref_seq = decompress_str(ref_seq_xz)
         self.ref_len = len(self.ref_seq)
         self.ref_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.fas', buffering=bufsize)
         self.ref_f.write('%s\n%s\n' % (self.ref_name, self.ref_seq)); self.ref_f.flush()
@@ -257,7 +257,7 @@ class ViReaDB:
         if tmp is None:
             raise KeyError("ID doesn't exist in database: %s" % ID)
         cram, pos_counts_xz, ins_counts_xz, consensus_xz = tmp
-        return cram, decompress_pos_counts(pos_counts_xz), decompress_ins_counts(ins_counts_xz), decompress_seq(consensus_xz)
+        return cram, decompress_pos_counts(pos_counts_xz), decompress_ins_counts(ins_counts_xz), decompress_str(consensus_xz)
 
     def get_IDs(self):
         '''Return the IDs in this database
@@ -353,8 +353,9 @@ class ViReaDB:
         # decompress counts, compute consensus, and save
         pos_counts = decompress_pos_counts(pos_counts_xz)
         ins_counts = decompress_ins_counts(ins_counts_xz)
-        consensus = compute_consensus(pos_counts, ins_counts, min_depth=min_depth, min_freq=min_freq, ambig=ambig)
-        consensus_xz = compress_seq(consensus)
+        consensus_seq = compute_consensus(pos_counts, ins_counts, min_depth=min_depth, min_freq=min_freq, ambig=ambig)
+        consensus = ">%s (vireadb v%s, min_depth=%s, min_freq=%s, ambig=%s, remove_gaps=%s)\n%s\n" % (ID, self.version, min_depth, min_freq, ambig, remove_gaps, consensus_seq)
+        consensus_xz = compress_str(consensus)
         self.cur.execute("UPDATE seqs SET CONSENSUS_XZ=? WHERE ID=?", (consensus_xz, ID))
         if commit:
             self.commit()
@@ -366,12 +367,12 @@ class ViReaDB:
             ``ID`` (``str``): The unique ID of the entry whose counts to return
 
         Returns:
-            The consensus sequence for ``ID`` (or ``None`` if not yet computed)
+            The consensus sequence for ``ID`` as a FASTA string (or ``None`` if not yet computed)
         '''
         tmp = self.cur.execute("SELECT CONSENSUS_XZ FROM seqs WHERE ID='%s' LIMIT 1" % ID).fetchone()
         if tmp is None:
             raise KeyError("ID doesn't exist in database: %s" % ID)
-        return decompress_seq(tmp[0])
+        return decompress_str(tmp[0])
 
     def export_cram(self, ID, out_fn, overwrite=False):
         '''Export the CRAM file of a given entry
@@ -447,7 +448,7 @@ def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
 
     # load reference genome
     ref_name, ref_seq = load_ref(ref_fn)
-    ref_seq_xz = compress_seq(ref_seq)
+    ref_seq_xz = compress_str(ref_seq)
 
     # index reference genome
     mmi_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.mmi', buffering=bufsize)

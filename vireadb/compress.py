@@ -9,31 +9,31 @@ from io import BytesIO
 from lzma import LZMACompressor, LZMADecompressor, PRESET_EXTREME
 import json
 
-def compress_seq(seq):
-    '''Compress genome sequence
+def compress_str(s):
+    '''Compress a string
 
     Args:
-        ``seq`` (``str``): The genome sequence
+        ``s`` (``str``): The string to compress
 
     Returns:
-        ``bytes`` object containing the LZMA-compressed genome sequence
+        ``bytes`` object containing the LZMA-compressed string
     '''
-    if seq is None:
+    if s is None:
         return None
     lzma_comp = LZMACompressor(preset=PRESET_EXTREME)
-    return lzma_comp.compress(seq.encode("ascii")) + lzma_comp.flush()
+    return lzma_comp.compress(s.encode("ascii")) + lzma_comp.flush()
 
-def decompress_seq(seq_xz):
-    '''Decompress genome sequence
+def decompress_str(s_xz):
+    '''Decompress a compressed string
 
     Args:
-        ``seq_xz`` (``bytes``): The LZMA-compressed genome sequence
+        ``s_xz`` (``bytes``): The LZMA-compressed string to decompress
 
     Returns:
-        ``str`` object containing the genome sequence
+        ``str`` object containing the decompressed string
     '''
     lzma_decomp = LZMADecompressor()
-    return lzma_decomp.decompress(seq_xz).decode()
+    return lzma_decomp.decompress(s_xz).decode()
 
 def compress_pos_counts(pos_counts):
     '''Compress position counts
