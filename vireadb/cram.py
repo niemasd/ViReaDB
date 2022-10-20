@@ -57,16 +57,31 @@ def compute_base_counts(aln, ref_len, min_qual=DEFAULT_MIN_QUAL):
         # handle insertions (if any)
         if len(insertion_end_inds) != 0:
             for insertion_start_ind, insertion_end_ind in zip(insertion_start_inds, insertion_end_inds):
+                # check very beginning or end of read
                 if insertion_start_ind == 0 or insertion_end_ind == len(aligned_pairs)-1:
                     continue # this insertion is at the very beginning or end of the read, so skip
-                prev_read_pos = aligned_pairs[insertion_start_ind-1][0]
-                if prev_read_pos < aln_start:
+
+                # check what's just before this insertion
+                i = insertion_start_ind - 1; prev_read_pos = aligned_pairs[i][0]
+                while prev_read_pos is None and i >= 0:
+                    i -= 1; prev_read_pos = aligned_pairs[i][0]
+                if prev_read_pos is None:
+                    continue # nothing in the read just before this insertion
+                elif prev_read_pos < aln_start:
                     continue # this insertion is right after a soft-clipped start, so skip
-                next_read_pos, next_ref_pos = aligned_pairs[insertion_end_ind+1]
-                if next_read_pos >= aln_end:
+
+                # check what's just after this insertion
+                i = insertion_end_ind + 1; next_read_pos, next_ref_pos = aligned_pairs[i]
+                while next_read_pos is None and i < len(aligned_pairs):
+                    i += 1; next_read_pos, next_ref_pos = aligned_pairs[i]
+                if next_read_pos is None:
+                    continue # nothing in the read just after this insertion
+                elif next_read_pos >= aln_end:
                     continue # this insertion is right before a soft-clipped end, so skip
-                if quals[prev_read_pos] < min_qual or quals[next_read_pos] < min_qual:
+                elif quals[prev_read_pos] < min_qual or quals[next_read_pos] < min_qual:
                     continue # base just before or just after this insertion is low quality, so skip
+
+                # handle this insertion
                 ins_seq = seq[aligned_pairs[insertion_start_ind][0] : aligned_pairs[insertion_end_ind][0]+1]
                 if next_ref_pos not in ins_counts:
                     ins_counts[next_ref_pos] = dict()

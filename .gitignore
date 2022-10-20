@@ -1,6 +1,9 @@
 # test files
 test.*
 *.db
+*.sam
+*.bam
+*.cram
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

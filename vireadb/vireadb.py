@@ -399,7 +399,7 @@ class ViReaDB:
         pos_counts = decompress_pos_counts(pos_counts_xz)
         ins_counts = decompress_ins_counts(ins_counts_xz)
         consensus_seq = compute_consensus(pos_counts, ins_counts, min_depth=min_depth, min_freq=min_freq, ambig=ambig)
-        consensus = ">%s (vireadb v%s, min_depth=%s, min_freq=%s, ambig=%s, remove_gaps=%s)\n%s\n" % (ID, self.version, min_depth, min_freq, ambig, remove_gaps, consensus_seq)
+        consensus = ">%s (vireadb v%s, min_depth=%s, min_freq=%s, ambig=%s, remove_gaps=%s)\n%s\n" % (ID, VERSION, min_depth, min_freq, ambig, remove_gaps, consensus_seq)
         consensus_xz = compress_str(consensus)
         self.cur.execute("UPDATE seqs SET CONSENSUS_XZ=? WHERE ID=?", (consensus_xz, ID))
         if commit:
@@ -436,13 +436,13 @@ class ViReaDB:
             raise KeyError("ID doesn't exist in database: %s" % ID)
         f = open(out_fn, 'wb'); f.write(tmp[0]); f.close()
 
-    def export_fasta(self, out_fn, IDs, overwrite=False):
+    def export_fasta(self, out_fn, IDs=None, overwrite=False):
         '''Export multiple consensus sequences as a FASTA file
 
         Args:
             ``out_fn`` (``str``): The path of the output FASTA file
 
-            ``IDs`` (``list``): List of IDs whose consensus sequences to export
+            ``IDs`` (``list``): List of IDs whose consensus sequences to export, or ``None`` to export all consensus sequences in the database
 
             ``overwrite`` (``bool``): Overwrite output file if it exists
         '''
@@ -450,6 +450,8 @@ class ViReaDB:
             raise ValueError("Output file exists: %s" % out_fn)
         if isinstance(IDs, str):
             IDs = [IDs]
+        elif IDs is None:
+            IDs = self.get_IDs()
         f = open(out_fn, 'w')
         for ID in IDs:
             try:
