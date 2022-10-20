@@ -101,6 +101,13 @@ class ViReaDB:
         '''Commit the SQLite3 database'''
         self.con.commit()
 
+    def vacuum(self):
+        '''Rebuild the database file, repacking it into the minimal amount of disk space'''
+        tmp = self.con.isolation_level
+        self.con.isolation_level = None # workaround for bug in Python 3.6.0's sqlite3 module (https://github.com/ghaering/pysqlite/issues/109#issuecomment-277506491)
+        self.cur.execute('VACUUM')
+        self.con.isolation_level = tmp
+
     def get_meta(self):
         '''Get the metadata from this ``ViReaDB`` database
 
@@ -214,19 +221,39 @@ class ViReaDB:
         if commit:
             self.commit()
 
-    def del_entry(self, ID, commit=True):
-        '''Remove an entry to this database
+    def del_reads(self, ID, confirm=True, commit=True):
+        '''Remove the reads from a given entry in this database in order to save space. This should only be done if the counts have already been computed (and even then, this is strongly discouraged).
 
         Args:
             ``ID`` (``str``): The unique ID of the entry to remove
 
+            ``confirm`` (``bool``): ``True`` to prompt the user for confirmation before removing the reads, otherwise ``False`` to remove reads silently (e.g. for automation)
+
             ``commit`` (``bool``): Commit database after removing this entry
         '''
-        self.cur.execute("DELETE FROM seqs WHERE ID='%s'" % ID)
-        if commit:
-            self.commit()
+        tmp = self.cur.execute("SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ FROM seqs WHERE ID='%s' LIMIT 1" % ID).fetchone()
+        if tmp is None:
+            raise KeyError("ID doesn't exist in database: %s" % ID)
+        cram, pos_counts_xz, ins_counts_xz = tmp
+        if cram is None:
+            raise RuntimeError("No reads in database for ID: %s" % ID)
+        if pos_counts_xz is None or ins_counts_xz is None:
+            raise RuntimeError("Base and insertion counts have not yet been computed for ID: %s" % ID)
+        if confirm and not input("Removing reads from ID: %s\nThis is strongly discouraged and should only be done if you have already backed up the reads elsewhere.\nDo you want to continue? [y/N] " % ID).lower().startswith('y'):
+            raise RuntimeError("Abort removing reads from ID: %s" % ID)
+        self.cur.execute('UPDATE seqs SET CRAM=? WHERE ID=? LIMIT 1', (None, ID))
+        self.vacuum()
 
-    def rename_entry(self, old_ID, new_ID, commit=True):
+    def del_entry(self, ID):
+        '''Remove an entry to this database
+
+        Args:
+            ``ID`` (``str``): The unique ID of the entry to remove
+        '''
+        self.cur.execute("DELETE FROM seqs WHERE ID='%s' LIMIT 1" % ID)
+        self.vacuum()
+
+    def rename_entry(self, old_ID, new_ID, commit=True, vacuum=False):
         '''Rename an entry in this database
 
         Args:
@@ -235,26 +262,26 @@ class ViReaDB:
             ``new_ID`` (``str``): The new ID to rename the entry
 
             ``commit`` (``bool``): Commit database after renaming this entry
+
+            ``vacuum`` (``bool``): Vacuum database after renaming this entry (to minimize database filesize)
         '''
         if new_ID in self:
             raise ValueError("ID already exists in database: %s" % new_ID)
-        self.cur.execute("UPDATE seqs SET ID=? WHERE ID=?", (new_ID, old_ID))
+        self.cur.execute("UPDATE seqs SET ID=? WHERE ID=? LIMIT 1", (new_ID, old_ID))
         consensus = self.get_consensus(new_ID)
         if consensus is not None:
             consensus_xz = compress_str(">%s%s" % (new_ID, consensus.lstrip(">%s" % old_ID)))
             self.cur.execute("UPDATE seqs SET CONSENSUS_XZ=? WHERE ID=?", (consensus_xz, new_ID))
         if commit:
             self.commit()
+        if vacuum:
+            self.vacuum()
 
-    def clear(self, commit=True):
-        '''Remove all entries from this database
-
-        Args:
-            ``commit`` (``bool``): Commit database after removing all entries
-        '''
+    def clear(self):
+        '''Remove all entries from this database'''
         self.cur.execute("DELETE FROM seqs")
-        if commit:
-            self.commit()
+        self.commit()
+        self.vacuum()
 
     def get_entry(self, ID):
         '''Return the data of an entry associated with a given ID in this database

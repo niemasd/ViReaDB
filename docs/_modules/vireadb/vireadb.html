@@ -141,6 +141,13 @@
         <span class="sd">&#39;&#39;&#39;Commit the SQLite3 database&#39;&#39;&#39;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">con</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
 
+<div class="viewcode-block" id="ViReaDB.vacuum"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.vacuum">[docs]</a>    <span class="k">def</span> <span class="nf">vacuum</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Rebuild the database file, repacking it into the minimal amount of disk space&#39;&#39;&#39;</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">con</span><span class="o">.</span><span class="n">isolation_level</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">con</span><span class="o">.</span><span class="n">isolation_level</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1"># workaround for bug in Python 3.6.0&#39;s sqlite3 module (https://github.com/ghaering/pysqlite/issues/109#issuecomment-277506491)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;VACUUM&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">con</span><span class="o">.</span><span class="n">isolation_level</span> <span class="o">=</span> <span class="n">tmp</span></div>
+
 <div class="viewcode-block" id="ViReaDB.get_meta"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.get_meta">[docs]</a>    <span class="k">def</span> <span class="nf">get_meta</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Get the metadata from this ``ViReaDB`` database</span>
 
@@ -254,19 +261,39 @@
         <span class="k">if</span> <span class="n">commit</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="ViReaDB.del_entry"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.del_entry">[docs]</a>    <span class="k">def</span> <span class="nf">del_entry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Remove an entry to this database</span>
+<div class="viewcode-block" id="ViReaDB.del_reads"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.del_reads">[docs]</a>    <span class="k">def</span> <span class="nf">del_reads</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">,</span> <span class="n">confirm</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Remove the reads from a given entry in this database in order to save space. This should only be done if the counts have already been computed (and even then, this is strongly discouraged).</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            ``ID`` (``str``): The unique ID of the entry to remove</span>
 
+<span class="sd">            ``confirm`` (``bool``): ``True`` to prompt the user for confirmation before removing the reads, otherwise ``False`` to remove reads silently (e.g. for automation)</span>
+
 <span class="sd">            ``commit`` (``bool``): Commit database after removing this entry</span>
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;DELETE FROM seqs WHERE ID=&#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">commit</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT CRAM, POS_COUNTS_XZ, INS_COUNTS_XZ FROM seqs WHERE ID=&#39;</span><span class="si">%s</span><span class="s2">&#39; LIMIT 1&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">tmp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;ID doesn&#39;t exist in database: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="n">cram</span><span class="p">,</span> <span class="n">pos_counts_xz</span><span class="p">,</span> <span class="n">ins_counts_xz</span> <span class="o">=</span> <span class="n">tmp</span>
+        <span class="k">if</span> <span class="n">cram</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;No reads in database for ID: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pos_counts_xz</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">ins_counts_xz</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Base and insertion counts have not yet been computed for ID: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">confirm</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">input</span><span class="p">(</span><span class="s2">&quot;Removing reads from ID: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">This is strongly discouraged and should only be done if you have already backed up the reads elsewhere.</span><span class="se">\n</span><span class="s2">Do you want to continue? [y/N] &quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;y&#39;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Abort removing reads from ID: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;UPDATE seqs SET CRAM=? WHERE ID=? LIMIT 1&#39;</span><span class="p">,</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">ID</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vacuum</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="ViReaDB.rename_entry"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.rename_entry">[docs]</a>    <span class="k">def</span> <span class="nf">rename_entry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">old_ID</span><span class="p">,</span> <span class="n">new_ID</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<div class="viewcode-block" id="ViReaDB.del_entry"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.del_entry">[docs]</a>    <span class="k">def</span> <span class="nf">del_entry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Remove an entry to this database</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ``ID`` (``str``): The unique ID of the entry to remove</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;DELETE FROM seqs WHERE ID=&#39;</span><span class="si">%s</span><span class="s2">&#39; LIMIT 1&quot;</span> <span class="o">%</span> <span class="n">ID</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vacuum</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="ViReaDB.rename_entry"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.rename_entry">[docs]</a>    <span class="k">def</span> <span class="nf">rename_entry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">old_ID</span><span class="p">,</span> <span class="n">new_ID</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">vacuum</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Rename an entry in this database</span>
 
 <span class="sd">        Args:</span>
@@ -275,26 +302,26 @@
 <span class="sd">            ``new_ID`` (``str``): The new ID to rename the entry</span>
 
 <span class="sd">            ``commit`` (``bool``): Commit database after renaming this entry</span>
+
+<span class="sd">            ``vacuum`` (``bool``): Vacuum database after renaming this entry (to minimize database filesize)</span>
 <span class="sd">        &#39;&#39;&#39;</span>
         <span class="k">if</span> <span class="n">new_ID</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;ID already exists in database: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">new_ID</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;UPDATE seqs SET ID=? WHERE ID=?&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">new_ID</span><span class="p">,</span> <span class="n">old_ID</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;UPDATE seqs SET ID=? WHERE ID=? LIMIT 1&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">new_ID</span><span class="p">,</span> <span class="n">old_ID</span><span class="p">))</span>
         <span class="n">consensus</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_consensus</span><span class="p">(</span><span class="n">new_ID</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">consensus</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">consensus_xz</span> <span class="o">=</span> <span class="n">compress_str</span><span class="p">(</span><span class="s2">&quot;&gt;</span><span class="si">%s%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">new_ID</span><span class="p">,</span> <span class="n">consensus</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">&quot;&gt;</span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">old_ID</span><span class="p">)))</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;UPDATE seqs SET CONSENSUS_XZ=? WHERE ID=?&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">consensus_xz</span><span class="p">,</span> <span class="n">new_ID</span><span class="p">))</span>
         <span class="k">if</span> <span class="n">commit</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">vacuum</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">vacuum</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="ViReaDB.clear"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.clear">[docs]</a>    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">commit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Remove all entries from this database</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            ``commit`` (``bool``): Commit database after removing all entries</span>
-<span class="sd">        &#39;&#39;&#39;</span>
+<div class="viewcode-block" id="ViReaDB.clear"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.clear">[docs]</a>    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Remove all entries from this database&#39;&#39;&#39;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;DELETE FROM seqs&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">commit</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vacuum</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="ViReaDB.get_entry"><a class="viewcode-back" href="../../index.html#vireadb.ViReaDB.get_entry">[docs]</a>    <span class="k">def</span> <span class="nf">get_entry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ID</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Return the data of an entry associated with a given ID in this database</span>
