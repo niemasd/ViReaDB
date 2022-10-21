@@ -53,4 +53,5 @@ setup(
         'Bug Reports': 'https://github.com/niemasd/ViReaDB/issues',
         'Source': 'https://github.com/niemasd/ViReaDB',
     },
+    install_requires=['pysam'],
 )
