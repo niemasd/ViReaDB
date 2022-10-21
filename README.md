@@ -16,7 +16,9 @@ pip install --user vireadb
 ```
 
 ### Dependencies
-In addition to installing ViReaDB itself (which is a Python package), you will also need to install its dependencies, [samtools](https://github.com/samtools/samtools) and [minimap2](https://github.com/lh3/minimap2), both of which must be in your `PATH`. The [Dockerfile](Dockerfile) in this repository may be helpful in setting up those tools.
+ViReaDB is a Python package that depends on the [pysam](https://github.com/pysam-developers/pysam) package.
+
+If your read mappings are not already in the CRAM format (i.e., they are in the SAM or BAM format), you will also need to install [samtools](https://github.com/samtools/samtools) for conversion to CRAM. If your reads are in the FASTQ format (meaning they need to be mapped to the reference genome), you will also need to install [minimap2](https://github.com/lh3/minimap2). Both tools must be in your `PATH`. The [Dockerfile](Dockerfile) in this repository may be helpful in setting up those tools.
 
 ## Usage
 Typical usage should be as follows:
