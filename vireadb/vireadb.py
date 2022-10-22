@@ -16,7 +16,6 @@ from sys import argv
 from tempfile import NamedTemporaryFile
 from warnings import warn
 import argparse
-import numpy
 import sqlite3
 
 # constants
