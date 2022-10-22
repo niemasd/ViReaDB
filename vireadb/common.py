@@ -9,7 +9,7 @@ from sys import stderr
 import numpy
 
 # constants
-VERSION = '0.0.12'
+VERSION = '0.0.13'
 DEFAULT_BUFSIZE = 1048576 # 1 MB
 DEFAULT_THREADS = 1
 DEFAULT_MIN_QUAL = 20

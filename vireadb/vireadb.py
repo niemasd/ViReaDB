@@ -60,8 +60,16 @@ class ViReaDB:
         self.ref_len = len(self.ref_seq)
         self.ref_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.fas', buffering=bufsize)
         self.ref_f.write('%s\n%s\n' % (self.ref_name, self.ref_seq)); self.ref_f.flush()
-        self.mmi_f = NamedTemporaryFile('wb', prefix='vireadb', suffix='.mmi', buffering=bufsize)
-        self.mmi_f.write(self.cur.execute("SELECT val FROM meta WHERE key='REF_MMI' LIMIT 1").fetchone()[0]); self.mmi_f.flush()
+        mmi_data = self.cur.execute("SELECT val FROM meta WHERE key='REF_MMI' LIMIT 1").fetchone()[0]
+        if mmi_data is None: # try to index ref genome if user has now installed Minimap2
+            mmi_data = index_ref_genome(self.ref_f.name)
+            if mmi_data is not None:
+                self.cur.execute("INSERT INTO meta VALUES(?, ?)", ('REF_MMI', mmi_data))
+        if mmi_data is None:
+            self.mmi_f = None
+        else:
+            self.mmi_f = NamedTemporaryFile('wb', prefix='vireadb', suffix='.mmi', buffering=bufsize)
+            self.mmi_f.write(mmi_data); self.mmi_f.flush()
 
     def __del__(self):
         '''``ViReaDB`` destructor'''
@@ -167,7 +175,10 @@ class ViReaDB:
         command_samtools_view_cram = BASE_COMMAND_SAMTOOLS_VIEW_CRAM + ['-T', self.ref_f.name, '-@', str(threads)]
         if not include_unmapped:
             command_samtools_view_cram += ['-F', '4'] # only include mapped reads
-        command_minimap2 = BASE_COMMAND_MINIMAP2 + ['-a', self.mmi_f.name]
+        if self.mmi_f is None:
+            command_minimap2 = None
+        else:
+            command_minimap2 = BASE_COMMAND_MINIMAP2 + ['-a', self.mmi_f.name]
 
         # handle CRAM (just read all data)
         if filetype == 'CRAM':
@@ -175,16 +186,24 @@ class ViReaDB:
 
         # handle BAM/SAM (convert to CRAM)
         elif filetype == 'BAM' or filetype == 'SAM':
-            cram_data = check_output(command_samtools_view_cram + [reads_fn])
+            try:
+                cram_data = check_output(command_samtools_view_cram + [reads_fn])
+            except FileNotFoundError:
+                raise RuntimeError("samtools not found in PATH, so BAM/SAM input is not supported")
 
         # handle FASTQ (map to ref + convert to CRAM)
         elif filetype == 'FASTQ':
-            if isinstance(reads_fn, str):
+            if self.mmi_f is None:
+                raise RuntimeError("Database does not have minimap2 index, so FASTQ input is not supported")
+            elif isinstance(reads_fn, str):
                 command_minimap2 += [reads_fn]
             else:
                 command_minimap2 += reads_fn
             p_minimap2 = Popen(command_minimap2, stdout=PIPE, stderr=DEVNULL)
-            cram_data = check_output(command_samtools_view_cram, stdin=p_minimap2.stdout)
+            try:
+                cram_data = check_output(command_samtools_view_cram, stdin=p_minimap2.stdout)
+            except:
+                raise RuntimeError("samtools not found in PATH, so FASTQ input is not supported")
             p_minimap2.wait()
 
         # invalid filetype
@@ -495,11 +514,9 @@ def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
     ref_seq_xz = compress_str(ref_seq)
 
     # index reference genome
-    mmi_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.mmi', buffering=bufsize)
-    mmi_fn = mmi_f.name; mmi_f.close()
-    call(BASE_COMMAND_MINIMAP2 + ['-d', mmi_fn, ref_fn], stdout=DEVNULL, stderr=DEVNULL)
-    mmi_f = open(mmi_fn, 'rb'); mmi_data = mmi_f.read()
-    mmi_f.close(); remove(mmi_fn)
+    mmi_data = index_ref_genome(ref_fn, bufsize=bufsize)
+    if mmi_data is None:
+        warn("minimap2 not found in PATH, so reference genome will not be indexed")
 
     # create SQLite3 database and populate with `meta` table
     con = sqlite3.connect(db_fn); cur = con.cursor()
@@ -511,6 +528,25 @@ def create_db(db_fn, ref_fn, overwrite=False, bufsize=DEFAULT_BUFSIZE):
     cur.execute("CREATE TABLE seqs(%s)" % ', '.join(SEQS_TABLE_COLS))
     con.commit(); con.close()
     return ViReaDB(db_fn)
+
+def index_ref_genome(ref_fn, bufsize=DEFAULT_BUFSIZE):
+    '''Index a reference genome using minimap2
+
+    Args:
+        ``ref_fn`` (``str``): The filename of the reference genome to index
+
+    Returns:
+        The minimap2 index as a ``bytes`` object
+    '''
+    mmi_f = NamedTemporaryFile('w', prefix='vireadb', suffix='.mmi', buffering=bufsize)
+    mmi_fn = mmi_f.name; mmi_f.close()
+    try:
+        call(BASE_COMMAND_MINIMAP2 + ['-d', mmi_fn, ref_fn], stdout=DEVNULL, stderr=DEVNULL)
+        mmi_f = open(mmi_fn, 'rb'); mmi_data = mmi_f.read()
+        mmi_f.close(); remove(mmi_fn)
+    except FileNotFoundError:
+        mmi_data = None
+    return mmi_data
 
 def load_db(db_fn):
     '''Load a ViReaDB database from file
