@@ -222,7 +222,7 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mmi_f</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">command_minimap2</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">command_minimap2</span> <span class="o">=</span> <span class="n">BASE_COMMAND_MINIMAP2</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;-a&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mmi_f</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+            <span class="n">command_minimap2</span> <span class="o">=</span> <span class="n">BASE_COMMAND_MINIMAP2</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;-a&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mmi_f</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s1">&#39;-t&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">threads</span><span class="p">)]</span>
 
         <span class="c1"># handle CRAM (just read all data)</span>
         <span class="k">if</span> <span class="n">filetype</span> <span class="o">==</span> <span class="s1">&#39;CRAM&#39;</span><span class="p">:</span>

@@ -182,7 +182,7 @@ class ViReaDB:
         if self.mmi_f is None:
             command_minimap2 = None
         else:
-            command_minimap2 = BASE_COMMAND_MINIMAP2 + ['-a', self.mmi_f.name]
+            command_minimap2 = BASE_COMMAND_MINIMAP2 + ['-a', self.mmi_f.name, '-t', str(threads)]
 
         # handle CRAM (just read all data)
         if filetype == 'CRAM':
