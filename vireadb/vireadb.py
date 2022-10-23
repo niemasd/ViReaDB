@@ -29,7 +29,6 @@ BASE_COMMAND_SAMTOOLS_VIEW_CRAM = [
     '--output-fmt-option', 'use_lzma=1',
     '--output-fmt-option', 'archive=1',
     '--output-fmt-option', 'level=9',
-    '--output-fmt-option', 'lossy_names=1',
     '-C', # CRAM output
 ]
 BASE_COMMAND_MINIMAP2 = [
@@ -123,7 +122,7 @@ class ViReaDB:
         '''
         return {'VERSION':self.version, 'REF_NAME':self.ref_name, 'REF_SEQ': self.ref_seq}
 
-    def add_entry(self, ID, reads_fn, filetype=None, include_unmapped=False, check_unique=True, bufsize=DEFAULT_BUFSIZE, threads=DEFAULT_THREADS, commit=True):
+    def add_entry(self, ID, reads_fn, filetype=None, lossy_names=True, include_unmapped=False, check_unique=True, bufsize=DEFAULT_BUFSIZE, threads=DEFAULT_THREADS, commit=True, verbose=False):
         '''Add a CRAM/BAM/SAM/FASTQ entry to this database. CRAM inputs are added exactly as-is.
 
         Args:
@@ -132,6 +131,8 @@ class ViReaDB:
             ``reads_fn`` (``str``): The input reads file. Can provide list of multiple files if FASTQ
 
             ``filetype`` (``str``): The format of the input reads file (CRAM, BAM, SAM, or FASTQ), or None to infer from ``reads_fn``
+
+            ``lossy_names`` (``bool``): ``True`` to discard read names when both reads of a read-pair are in the same CRAM slicel (results in better compression), otherwise ``False`` to keep all read names
 
             ``include_unmapped`` (``bool``): Include unmapped reads when converting from non-CRAM formats
 
@@ -142,6 +143,8 @@ class ViReaDB:
             ``threads`` (``int``): Number of threads to use for compression
 
             ``commit`` (``bool``): Commit database after adding this entry
+
+            ``verbose`` (``bool``): ``True`` to enable verbose messages (e.g. samtools and minimap2 commands), otherwise ``False``
         '''
         # check for validity
         if check_unique and ID in self:
@@ -172,6 +175,8 @@ class ViReaDB:
 
         # prep samtools and minimap2 commands
         command_samtools_view_cram = BASE_COMMAND_SAMTOOLS_VIEW_CRAM + ['-T', self.ref_f.name, '-@', str(threads)]
+        if lossy_names:
+            command_samtools_view_cram += ['--output-fmt-option', 'lossy_names=1']
         if not include_unmapped:
             command_samtools_view_cram += ['-F', '4'] # only include mapped reads
         if self.mmi_f is None:
@@ -186,7 +191,10 @@ class ViReaDB:
         # handle BAM/SAM (convert to CRAM)
         elif filetype == 'BAM' or filetype == 'SAM':
             try:
-                cram_data = check_output(command_samtools_view_cram + [reads_fn])
+                command_samtools_view_cram += [reads_fn]
+                if verbose:
+                    print("Command: %s" % ' '.join(command_samtools_view_cram))
+                cram_data = check_output(command_samtools_view_cram)
             except FileNotFoundError:
                 raise RuntimeError("samtools not found in PATH, so BAM/SAM input is not supported")
 
@@ -198,6 +206,8 @@ class ViReaDB:
                 command_minimap2 += [reads_fn]
             else:
                 command_minimap2 += reads_fn
+            if verbose:
+                print("Command: %s | %s" % (' '.join(command_minimap2), ' '.join(command_samtools_view_cram)))
             p_minimap2 = Popen(command_minimap2, stdout=PIPE, stderr=DEVNULL)
             try:
                 cram_data = check_output(command_samtools_view_cram, stdin=p_minimap2.stdout)
