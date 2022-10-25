@@ -38,7 +38,7 @@ Full documentation can be found at [https://niemasd.github.io/ViReaDB/](https://
 ## Citing ViReaDB
 If you use ViReaDB in your work, please cite this GitHub repository (a manuscript is in preparation):
 
-> https://github.com/niemasd/ViReaDB
+> Moshiri N (2022). "ViReaDB: A user-friendly database for compactly storing viral sequence data and rapidly computing consensus genome sequences." *bioRxiv*. [doi:10.1101/2022.10.21.513318](https://doi.org/10.1101/2022.10.21.513318)
 
 # Tips and Tricks
 The following are some tips or tricks when using ViReaDB.
