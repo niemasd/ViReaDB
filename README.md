@@ -36,7 +36,7 @@ seq = db.get_consensus("my_sample")
 Full documentation can be found at [https://niemasd.github.io/ViReaDB/](https://niemasd.github.io/ViReaDB/), and more examples can be found in the [ViReaDB Wiki](https://github.com/niemasd/ViReaDB/wiki).
 
 ## Citing ViReaDB
-If you use ViReaDB in your work, please cite this GitHub repository (a manuscript is in preparation):
+If you use ViReaDB in your work, please cite:
 
 > Moshiri N (2022). "ViReaDB: A user-friendly database for compactly storing viral sequence data and rapidly computing consensus genome sequences." *bioRxiv*. [doi:10.1101/2022.10.21.513318](https://doi.org/10.1101/2022.10.21.513318)
 
